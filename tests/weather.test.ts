@@ -207,10 +207,23 @@ test("isForecastQuery detects weather + this week / next week / next few days", 
 	assert.ok(m3);
 	assert.equal(m3!.location, "Berlin");
 
-	// No location — uses default
-	const m4 = isForecastQuery("weather this week");
+	// User's exact phrasing: "for this week"
+	const m4 = isForecastQuery("what's the weather for this week?");
 	assert.ok(m4);
 	assert.equal(m4!.location, undefined);
+
+	const m5 = isForecastQuery("what's the weather in Manchester for this week?");
+	assert.ok(m5);
+	assert.equal(m5!.location, "Manchester");
+
+	const m6 = isForecastQuery("what's the weather for the week?");
+	assert.ok(m6);
+	assert.equal(m6!.location, undefined);
+
+	// No location — uses default
+	const m7 = isForecastQuery("weather this week");
+	assert.ok(m7);
+	assert.equal(m7!.location, undefined);
 
 	// Not a forecast — "today" should not match
 	assert.equal(isForecastQuery("weather in London today"), null);

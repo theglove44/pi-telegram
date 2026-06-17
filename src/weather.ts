@@ -81,8 +81,8 @@ export function isForecastQuery(text: string): ForecastQueryMatch | null {
 	let m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?(?:weekly\s+)?forecast\s*(?:for\s+)?(.+?)$/i);
 	if (m) return { text: t, location: loc(m[1]) };
 
-	// "weather [in location] this week / next week / next few days / for the week"
-	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?))?\s*(?:this\s+week|next\s+(?:week|few\s+days|couple\s+of\s+days)|for\s+(?:the\s+)?(?:week|next\s+\d+\s+days))\??$/i);
+	// "weather [in location] this week / next week / next few days / for the week / for this week"
+	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?))?\s*(?:this\s+week|next\s+(?:week|few\s+days|couple\s+of\s+days)|for\s+(?:the\s+|this\s+)?(?:week|next\s+\d+\s+days))\??$/i);
 	if (m) return { text: t, location: loc(m[1]) };
 
 	// Bare "forecast" or "weekly forecast" (no location phrase)

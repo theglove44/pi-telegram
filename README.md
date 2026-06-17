@@ -95,6 +95,7 @@ pi -e /home/christof21/Projects/pi-telegram/index.ts
 Casual weather queries are intercepted before they reach the LLM:
 
 - "what's the weather in London?" → current conditions + today's high/low
+- "what's the weather for this week?" → 7-day daily forecast (uses default location)
 - "forecast for Paris" → 7-day daily forecast
 - "weather in Tokyo next week" → 7-day forecast
 - "/tgweather Paris, France" → current weather
