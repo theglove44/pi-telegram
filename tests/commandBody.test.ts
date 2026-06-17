@@ -201,6 +201,19 @@ test("dispatchTelegramCommand: tgapprove clear empties the list", async () => {
 	assert.equal(approveListBody(), "always-allow (0):\n(empty)");
 });
 
+test("dispatchTelegramCommand: tgweather with no args returns usage", async () => {
+	const { ctx } = makeCtx();
+	const r = await dispatchTelegramCommand("tgweather", "", ctx);
+	assert.match(r.text, /Usage/);
+	assert.match(r.text, /tgweather/);
+});
+
+test("dispatchTelegramCommand: tgweather returns not-found for bogus location", async () => {
+	const { ctx } = makeCtx();
+	const r = await dispatchTelegramCommand("tgweather", "XyzzyNope", ctx);
+	assert.match(r.text, /Couldn't find/);
+});
+
 test("dispatchTgCmdCallback: tgcmd:model:apply sets the model", async () => {
 	const { ctx, setModel } = makeCtx();
 	const r = await dispatchTgCmdCallback("tgcmd:model:openai/gpt-4o", ctx);

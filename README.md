@@ -82,8 +82,21 @@ pi -e /home/christof21/Projects/pi-telegram/index.ts
 | `/tgcompact` | Compact the session |
 | `/tgreconnect` | Force a long-poll reconnect |
 | `/tgapprove [clear]` | Show / clear the always-allow list |
+| `/tgweather <location>` | Get current weather + today's high/low via Open-Meteo |
 | `/telegram-setup` | One-shot config (token + chat id) |
 | `/abort` `/compact` `/new` `/model` `/thinking` `/queue` `/status` | pi core commands (forwarded) |
+
+## Weather
+
+Casual weather queries are intercepted before they reach the LLM:
+
+- "what's the weather in London?"
+- "weather in Tokyo"
+- "/tgweather Paris, France"
+
+Data comes from [Open-Meteo](https://open-meteo.com) — no API key, no
+rate-limit anxiety, no config. If the location is ambiguous, the reply
+shows the resolved city/country and the original query.
 
 ## How replies are rendered
 
@@ -121,6 +134,7 @@ src/
 ├── inline.ts                  # Inline keyboards, callback dispatch, approval gate
 ├── commands.ts                # Slash commands
 ├── lifecycle.ts               # pi event hooks (agent_end, tool_call, message_update)
+├── weather.ts                 # Open-Meteo weather lookup
 └── types.ts                   # Shared types
 tests/                         # Node --test, 5 suites
 scripts/setup.sh               # Interactive setup helper

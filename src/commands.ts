@@ -111,4 +111,13 @@ export function registerTelegramCommands(pi: ExtensionAPI, deps: CommandDeps): v
 			ctx.ui.notify(r.text, "info");
 		},
 	});
+
+	pi.registerCommand("tgweather", {
+		description: "pi-telegram: get weather for a location via Open-Meteo.",
+		handler: async (args, ctx) => {
+			const c = await commandCtxFromTerminal(pi, deps.queue, deps, ctx);
+			const r = await dispatchTelegramCommand("tgweather", args, c);
+			ctx.ui.notify(r.text, "info");
+		},
+	});
 }

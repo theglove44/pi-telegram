@@ -46,6 +46,7 @@ import {
 	type CommandCtx,
 	type ModelRegistryLike,
 } from "./src/commandBody.js";
+import { extractLocation, weatherReply } from "./src/weather.js";
 
 export default function (pi: ExtensionAPI): void {
 	const queue = new TurnQueue();
@@ -139,6 +140,7 @@ export default function (pi: ExtensionAPI): void {
 						{ command: "tgcompact", description: "Compact the session" },
 						{ command: "tgreconnect", description: "Force a long-poll reconnect" },
 						{ command: "tgapprove", description: "Manage always-allow list" },
+						{ command: "tgweather", description: "Get weather for a location" },
 					],
 				});
 				console.log("[pi-telegram] command menu registered with Telegram");
@@ -301,6 +303,29 @@ async function handleUpdate(
 	// Build the turn and enqueue it. We manage the queue ourselves so that
 	// multiple Telegram messages sent while pi is busy don't get dropped by
 	// pi.sendUserMessage's "Agent is already processing" error.
+
+	// First, intercept plain-English weather questions (e.g. "what's the
+	// weather in London?") so they don't have to round-trip through the LLM.
+	const weatherLocation = extractLocation(text);
+	if (weatherLocation !== null) {
+		if (!weatherLocation) {
+			try { await client.sendMessage(chatId, "🌍 Tell me the location: e.g. \"/tgweather London\" or \"weather in Tokyo\"", {}); } catch { /* ignore */ }
+			return;
+		}
+		try {
+			try { await client.sendChatAction(chatId, "typing"); } catch { /* ignore */ }
+			const reply = await weatherReply(weatherLocation);
+			const parseMode = /<[a-z]/.test(reply) ? "HTML" : undefined;
+			try { await client.sendMessage(chatId, reply, { parseMode }); } catch (err) {
+				console.error(`[pi-telegram] weather reply failed: ${(err as Error).message}`);
+			}
+		} catch (err) {
+			console.error(`[pi-telegram] weather lookup failed: ${(err as Error).message}`);
+			try { await client.sendMessage(chatId, `❌ Weather lookup failed: ${(err as Error).message}`, {}); } catch { /* ignore */ }
+		}
+		return;
+	}
+
 	const built = await buildTurnFromMessage(client, msg);
 	const composed = annotateForPi(msg, "msg") + (built.files.length > 0
 		? `\n\n[attached files: ${built.files.map((f) => f.name).join(", ")}]`
@@ -347,7 +372,7 @@ async function tryDispatchTelegramCommand(
 	// we want to alias a core pi command).
 	const known = new Set([
 		"tgstatus", "tgabort", "tgqueue", "tgmodel", "tgthinking",
-		"tgtools", "tgnew", "tgcompact", "tgreconnect", "tgapprove",
+		"tgtools", "tgnew", "tgcompact", "tgreconnect", "tgapprove", "tgweather",
 		"status", "abort", "queue", "model", "thinking", "compact", "new",
 	]);
 	if (!known.has(name)) return false;

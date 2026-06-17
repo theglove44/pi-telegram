@@ -30,6 +30,7 @@ import {
 	queueBrowserMarkup,
 } from "./inline.js";
 import { loadAlwaysAllow, saveAlwaysAllow } from "./inline.js";
+import { weatherReply } from "./weather.js";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 type ThinkingLevel = typeof THINKING_LEVELS[number];
@@ -246,7 +247,7 @@ export function approveClearBody(): string {
 
 export type CommandName =
 	| "tgstatus" | "tgabort" | "tgqueue" | "tgmodel" | "tgthinking"
-	| "tgtools" | "tgnew" | "tgcompact" | "tgreconnect" | "tgapprove"
+	| "tgtools" | "tgnew" | "tgcompact" | "tgreconnect" | "tgapprove" | "tgweather"
 	| "model" | "thinking" | "queue" | "status" | "compact" | "new" | "abort" | "modelpage";
 
 /**
@@ -337,6 +338,18 @@ export async function dispatchTelegramCommand(
 				return { text: approveClearBody() };
 			}
 			return { text: approveListBody() };
+		}
+		case "tgweather": {
+			const query = args.trim();
+			if (!query) {
+				return { text: "Usage: /tgweather \u003clocation\u003e\nExamples: /tgweather London, /tgweather Tokyo, Japan" };
+			}
+			try {
+				const reply = await weatherReply(query);
+				return { text: reply };
+			} catch (err) {
+				return { text: `❌ Weather lookup failed: ${(err as Error).message}` };
+			}
 		}
 	}
 }
