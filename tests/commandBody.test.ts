@@ -330,3 +330,25 @@ test("statusBody shows the available providers line", () => {
 	const out = statusBody(ctx);
 	assert.match(out, /available providers: deepseek, ollama-cloud/);
 });
+
+// --- Forecast dispatch tests ---
+
+test("dispatchTelegramCommand: tgweather forecast without location returns prompt", async () => {
+	const { ctx } = makeCtx();
+	const r = await dispatchTelegramCommand("tgweather", "forecast", ctx);
+	assert.match(r.text, /Tell me the location/);
+});
+
+test("dispatchTelegramCommand: tgweather forecast bogus returns not-found", async () => {
+	const { ctx } = makeCtx();
+	const r = await dispatchTelegramCommand("tgweather", "forecast XyzzyNope", ctx);
+	assert.match(r.text, /Couldn't find/);
+});
+
+test("dispatchTelegramCommand: tgweather with this week suffix routes to forecast", async () => {
+	const { ctx } = makeCtx();
+	const r = await dispatchTelegramCommand("tgweather", "London this week", ctx);
+	// Should produce a forecast response, not a "weather for" response.
+	assert.match(r.text, /forecast for London/);
+	assert.match(r.text, /Mon|Tue|Wed|Thu|Fri|Sat|Sun/);
+});

@@ -83,6 +83,8 @@ pi -e /home/christof21/Projects/pi-telegram/index.ts
 | `/tgreconnect` | Force a long-poll reconnect |
 | `/tgapprove [clear]` | Show / clear the always-allow list |
 | `/tgweather <location>` | Get current weather + today's high/low via Open-Meteo |
+| `/tgweather forecast <location>` | Get 7-day forecast for a location |
+| `/tgweather <location> this week` | Shorthand for a forecast query |
 | `/tgweather-setdefault <location>` | Set default location for bare "what's the weather?" queries |
 | `/tgweather-cleargetdefault` | Clear the default weather location |
 | `/telegram-setup` | One-shot config (token + chat id) |
@@ -92,17 +94,27 @@ pi -e /home/christof21/Projects/pi-telegram/index.ts
 
 Casual weather queries are intercepted before they reach the LLM:
 
-- "what's the weather in London?"
-- "weather in Tokyo"
-- "/tgweather Paris, France"
+- "what's the weather in London?" → current conditions + today's high/low
+- "forecast for Paris" → 7-day daily forecast
+- "weather in Tokyo next week" → 7-day forecast
+- "/tgweather Paris, France" → current weather
+- "/tgweather forecast Rome" → 7-day forecast
+- "/tgweather Berlin this week" → 7-day forecast
 
-If you ask "what's the weather?" without a location, the bot uses your
-default location (set via `/tgweather-setdefault`). If no default is set,
-it asks you for one.
+If you ask "what's the weather?" or "forecast" without a location, the
+bot uses your default location (set via `/tgweather-setdefault`). If no
+default is set, it asks you for one.
 
 Data comes from [Open-Meteo](https://open-meteo.com) — no API key, no
 rate-limit anxiety, no config. If the location is ambiguous, the reply
 shows the resolved city/country and the original query.
+
+### Forecast
+
+The 7-day forecast shows each day with:
+- Day name + date (e.g. "Wed 17 Jun")
+- WMO weather condition (emoji + label)
+- High and low temperatures
 
 ## How replies are rendered
 

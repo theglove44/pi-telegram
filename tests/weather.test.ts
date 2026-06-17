@@ -11,10 +11,15 @@ import {
 	extractLocation,
 	geocodeLocation,
 	fetchWeather,
+	fetchForecast,
 	formatWeather,
+	formatForecast,
 	weatherReply,
+	weatherReplyForecast,
 	describeWeatherCode,
+	isForecastQuery,
 	type GeocodeResult,
+	type ForecastDay,
 } from "../src/weather.ts";
 
 function makeFetch(handlers: { geocode?: unknown; forecast?: unknown; fail?: string }): typeof fetch {
@@ -156,5 +161,134 @@ test("weatherReply returns formatted weather on success", async () => {
 test("weatherReply returns a not-found message when geocoding misses", async () => {
 	const fetchImpl = makeFetch({ geocode: { results: [] } });
 	const reply = await weatherReply("Nowheresville", fetchImpl);
+	assert.match(reply, /Couldn't find a location/);
+});
+
+// --- Forecast tests ---
+
+test("isForecastQuery detects bare forecast", () => {
+	assert.ok(isForecastQuery("forecast"));
+	assert.ok(isForecastQuery("Forecast"));
+	assert.ok(isForecastQuery("what's the forecast?"));
+	assert.ok(isForecastQuery("what is the forecast"));
+	assert.ok(isForecastQuery("weekly forecast"));
+	assert.equal(isForecastQuery("what's the weather?"), null);
+	assert.equal(isForecastQuery("hello"), null);
+});
+
+test("isForecastQuery detects forecast + location", () => {
+	const m1 = isForecastQuery("forecast for London");
+	assert.ok(m1);
+	assert.equal(m1!.location, "London");
+
+	const m2 = isForecastQuery("what's the forecast for Tokyo?");
+	assert.ok(m2);
+	assert.equal(m2!.location, "Tokyo");       // trailing ? stripped
+
+	const mQ = isForecastQuery("forecast for Paris?");
+	assert.ok(mQ);
+	assert.equal(mQ!.location, "Paris");
+
+	const m3 = isForecastQuery("weekly forecast Paris");
+	assert.ok(m3);
+	assert.equal(m3!.location, "Paris");
+});
+
+test("isForecastQuery detects weather + this week / next week / next few days", () => {
+	const m1 = isForecastQuery("weather in London this week");
+	assert.ok(m1);
+	assert.equal(m1!.location, "London");
+
+	const m2 = isForecastQuery("what's the weather in Paris next week?");
+	assert.ok(m2);
+	assert.equal(m2!.location, "Paris");
+
+	const m3 = isForecastQuery("weather in Berlin next few days");
+	assert.ok(m3);
+	assert.equal(m3!.location, "Berlin");
+
+	// No location — uses default
+	const m4 = isForecastQuery("weather this week");
+	assert.ok(m4);
+	assert.equal(m4!.location, undefined);
+
+	// Not a forecast — "today" should not match
+	assert.equal(isForecastQuery("weather in London today"), null);
+	assert.equal(isForecastQuery("what's the weather?"), null);
+});
+
+test("fetchForecast returns 7 days of forecast data", async () => {
+	const location: GeocodeResult = { name: "Berlin", country: "Germany", latitude: 52.52, longitude: 13.41 };
+	const fetchImpl = makeFetch({
+		forecast: {
+			daily: {
+				time: ["2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21", "2026-06-22", "2026-06-23"],
+				temperature_2m_max: [22.1, 24.0, 19.5, 21.0, 23.5, 25.0, 20.0],
+				temperature_2m_min: [14.0, 15.0, 11.0, 13.0, 16.0, 17.0, 12.0],
+				weather_code: [2, 1, 61, 3, 0, 63, 45],
+			},
+		},
+	});
+	const f = await fetchForecast(location, fetchImpl);
+	assert.equal(f.location.name, "Berlin");
+	assert.equal(f.days.length, 7);
+	const d0 = f.days[0]!;
+	assert.equal(d0.date, "2026-06-17");
+	assert.equal(d0.max, 22.1);
+	assert.equal(d0.min, 14.0);
+	assert.equal(d0.weatherCode, 2);
+	const d6 = f.days[6]!;
+	assert.equal(d6.date, "2026-06-23");
+	assert.equal(d6.max, 20.0);
+	assert.equal(d6.weatherCode, 45);
+});
+
+test("formatForecast renders 7-day Telegram HTML", () => {
+	const days: ForecastDay[] = [
+		{ date: "2026-06-17", max: 22.1, min: 14.0, weatherCode: 2 },
+		{ date: "2026-06-18", max: 24.0, min: 15.0, weatherCode: 1 },
+	];
+	const result = formatForecast({
+		location: { name: "Berlin", country: "Germany", latitude: 52.52, longitude: 13.41 },
+		days,
+	});
+	assert.match(result, /7-day forecast for Berlin, Germany/);
+	assert.match(result, /Wed.*Jun.*\u2014.*partly cloudy/);
+	assert.match(result, /Thu.*Jun.*\u2014.*mainly clear/);
+	assert.match(result, /22\.1/);
+	assert.match(result, /14\.0/);
+});
+
+test("formatForecast includes query when it differs from resolved region", () => {
+	const days: ForecastDay[] = [
+		{ date: "2026-06-17", max: 20.0, min: 10.0, weatherCode: 0 },
+	];
+	const result = formatForecast({
+		location: { name: "Springfield", country: "United States", admin1: "Illinois", latitude: 0, longitude: 0 },
+		days,
+	}, "Springfield, IL");
+	assert.match(result, /<i>Query: Springfield, IL<\/i>/);
+});
+
+test("weatherReplyForecast returns formatted forecast on success", async () => {
+	const fetchImpl = makeFetch({
+		geocode: { results: [{ name: "Paris", country: "France", latitude: 48.85, longitude: 2.35 }] },
+		forecast: {
+			daily: {
+				time: ["2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21", "2026-06-22", "2026-06-23"],
+				temperature_2m_max: [23.0, 25.0, 20.0, 22.0, 24.0, 26.0, 21.0],
+				temperature_2m_min: [16.0, 17.0, 13.0, 15.0, 18.0, 19.0, 14.0],
+				weather_code: [1, 0, 61, 2, 3, 63, 45],
+			},
+		},
+	});
+	const reply = await weatherReplyForecast("Paris", fetchImpl);
+	assert.match(reply, /7-day forecast for Paris/);
+	assert.match(reply, /Jun/);
+});
+
+test("weatherReplyForecast returns not-found when geocoding misses", async () => {
+	const fetchImpl = makeFetch({ geocode: { results: [] } });
+	const reply = await weatherReplyForecast("Nowheresville", fetchImpl);
 	assert.match(reply, /Couldn't find a location/);
 });

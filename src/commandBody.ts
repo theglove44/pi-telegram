@@ -31,7 +31,7 @@ import {
 } from "./inline.js";
 import { loadAlwaysAllow, saveAlwaysAllow } from "./inline.js";
 import { readDefaultLocation, saveDefaultLocation } from "./config.js";
-import { weatherReply } from "./weather.js";
+import { isForecastQuery, weatherReply, weatherReplyForecast } from "./weather.js";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 type ThinkingLevel = typeof THINKING_LEVELS[number];
@@ -343,7 +343,24 @@ export async function dispatchTelegramCommand(
 		case "tgweather": {
 			const query = args.trim();
 			if (!query) {
-				return { text: "Usage: /tgweather \u003clocation\u003e\nExamples: /tgweather London, /tgweather Tokyo, Japan" };
+				return { text: "Usage: /tgweather \u003clocation\u003e\nExamples: /tgweather London, /tgweather Tokyo, Japan\nFor forecasts: /tgweather forecast London or /tgweather London this week" };
+			}
+			// Check if the query is a forecast request.
+			// Try the bare query first (e.g. "forecast London"), then with
+			// "weather in " prefix (e.g. "London this week").
+			let forecastMatch = isForecastQuery(query);
+			if (!forecastMatch) {
+				forecastMatch = isForecastQuery("weather in " + query);
+			}
+			if (forecastMatch) {
+				const loc = forecastMatch.location || readDefaultLocation();
+				if (!loc) return { text: "❌ Tell me the location. Usage: /tgweather forecast London" };
+				try {
+					const reply = await weatherReplyForecast(loc);
+					return { text: reply };
+				} catch (err) {
+					return { text: `❌ Forecast lookup failed: ${(err as Error).message}` };
+				}
 			}
 			try {
 				const reply = await weatherReply(query);

@@ -47,7 +47,7 @@ import {
 	type CommandCtx,
 	type ModelRegistryLike,
 } from "./src/commandBody.js";
-import { extractLocation, weatherReply } from "./src/weather.js";
+import { extractLocation, isForecastQuery, weatherReply, weatherReplyForecast } from "./src/weather.js";
 
 export default function (pi: ExtensionAPI): void {
 	const queue = new TurnQueue();
@@ -141,7 +141,7 @@ export default function (pi: ExtensionAPI): void {
 						{ command: "tgcompact", description: "Compact the session" },
 						{ command: "tgreconnect", description: "Force a long-poll reconnect" },
 						{ command: "tgapprove", description: "Manage always-allow list" },
-						{ command: "tgweather", description: "Get weather for a location" },
+						{ command: "tgweather", description: "Current weather or 7-day forecast (e.g. /tgweather forecast London)" },
 					],
 				});
 				console.log("[pi-telegram] command menu registered with Telegram");
@@ -305,7 +305,30 @@ async function handleUpdate(
 	// multiple Telegram messages sent while pi is busy don't get dropped by
 	// pi.sendUserMessage's "Agent is already processing" error.
 
-	// First, intercept plain-English weather questions (e.g. "what's the
+	// First, intercept forecast queries (e.g. "forecast", "weather in London
+	// this week") before they reach the LLM.
+	const forecastMatch = isForecastQuery(text);
+	if (forecastMatch) {
+		const forecastLocation = forecastMatch.location ?? readDefaultLocation();
+		if (!forecastLocation) {
+			try { await client.sendMessage(chatId, "🌍 Tell me the location for the forecast: e.g. \"/tgweather forecast London\" or \"forecast for Tokyo\"", {}); } catch { /* ignore */ }
+			return;
+		}
+		try {
+			try { await client.sendChatAction(chatId, "typing"); } catch { /* ignore */ }
+			const reply = await weatherReplyForecast(forecastLocation);
+			const parseMode = /<[a-z]/.test(reply) ? "HTML" : undefined;
+			try { await client.sendMessage(chatId, reply, { parseMode }); } catch (err) {
+				console.error(`[pi-telegram] forecast reply failed: ${(err as Error).message}`);
+			}
+		} catch (err) {
+			console.error(`[pi-telegram] forecast lookup failed: ${(err as Error).message}`);
+			try { await client.sendMessage(chatId, `❌ Forecast lookup failed: ${(err as Error).message}`, {}); } catch { /* ignore */ }
+		}
+		return;
+	}
+
+	// Intercept plain-English weather questions (e.g. "what's the
 	// weather in London?") so they don't have to round-trip through the LLM.
 	const weatherLocation = extractLocation(text) ?? readDefaultLocation();
 	if (weatherLocation !== undefined && weatherLocation !== null) {
