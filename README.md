@@ -126,12 +126,28 @@ tests/                         # Node --test, 5 suites
 scripts/setup.sh               # Interactive setup helper
 ```
 
-## Tests
+## Tests and daily development
 
 ```bash
 npm test           # node --experimental-strip-types --test
 npm run typecheck  # tsc --noEmit
 ```
+
+For quick local iteration, run everything before committing:
+
+```bash
+npm run typecheck && npm test
+```
+
+Then push:
+
+```bash
+git add .
+git commit -m "<what changed>"
+git push origin main
+```
+
+The repository is at `https://github.com/theglove44/pi-telegram`.
 
 ## What this is *not*
 
