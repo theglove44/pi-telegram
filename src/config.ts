@@ -106,6 +106,7 @@ function readConfigFile(): TgConfigFile | null {
 			botId: typeof parsed.botId === "number" ? parsed.botId : undefined,
 			allowedChatId: parsed.allowedChatId,
 			lastUpdateId: typeof parsed.lastUpdateId === "number" ? parsed.lastUpdateId : 0,
+			defaultLocation: typeof parsed.defaultLocation === "string" ? parsed.defaultLocation : undefined,
 		};
 	} catch {
 		return null;
@@ -160,6 +161,7 @@ export async function loadConfig(): Promise<TgConfig> {
 		botId: file.botId,
 		allowedChatId: file.allowedChatId,
 		lastUpdateId: file.lastUpdateId,
+		defaultLocation: file.defaultLocation,
 	};
 }
 
@@ -176,6 +178,17 @@ export function setLastUpdateId(id: number): void {
 	if (id <= 0) return;
 	const current = readConfigFileOrEmpty();
 	if (id > current.lastUpdateId) saveConfigFile({ lastUpdateId: id });
+}
+
+/** Read the configured default weather location (if any). */
+export function readDefaultLocation(): string | undefined {
+	return readConfigFileOrEmpty().defaultLocation;
+}
+
+/** Persist a default weather location (or clear it if empty). */
+export function saveDefaultLocation(location: string | undefined): void {
+	const current = readConfigFileOrEmpty();
+	saveConfigFile({ ...current, defaultLocation: location && location.trim() ? location.trim() : undefined });
 }
 
 /** Check if the keyring backend is available. */

@@ -35,6 +35,7 @@ import {
 	writeTokenToKeyring,
 	saveConfigFile,
 	keyringAvailable,
+	readDefaultLocation,
 } from "./src/config.js";
 import { buildTurnFromMessage, annotateForPi } from "./src/turns.js";
 import { dispatchCallback } from "./src/inline.js";
@@ -306,8 +307,8 @@ async function handleUpdate(
 
 	// First, intercept plain-English weather questions (e.g. "what's the
 	// weather in London?") so they don't have to round-trip through the LLM.
-	const weatherLocation = extractLocation(text);
-	if (weatherLocation !== null) {
+	const weatherLocation = extractLocation(text) ?? readDefaultLocation();
+	if (weatherLocation !== undefined && weatherLocation !== null) {
 		if (!weatherLocation) {
 			try { await client.sendMessage(chatId, "🌍 Tell me the location: e.g. \"/tgweather London\" or \"weather in Tokyo\"", {}); } catch { /* ignore */ }
 			return;

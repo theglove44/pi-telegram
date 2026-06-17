@@ -120,4 +120,22 @@ export function registerTelegramCommands(pi: ExtensionAPI, deps: CommandDeps): v
 			ctx.ui.notify(r.text, "info");
 		},
 	});
+
+	pi.registerCommand("tgweather-setdefault", {
+		description: "pi-telegram: set a default weather location (bare weather queries use it).",
+		handler: async (args, ctx) => {
+			const c = await commandCtxFromTerminal(pi, deps.queue, deps, ctx);
+			const r = await dispatchTelegramCommand("tgweather-setdefault", args, c);
+			ctx.ui.notify(r.text, "info");
+		},
+	});
+
+	pi.registerCommand("tgweather-cleargetdefault", {
+		description: "pi-telegram: clear the default weather location.",
+		handler: async (_args, ctx) => {
+			const c = await commandCtxFromTerminal(pi, deps.queue, deps, ctx);
+			const r = await dispatchTelegramCommand("tgweather-cleargetdefault", "", c);
+			ctx.ui.notify(r.text, "info");
+		},
+	});
 }

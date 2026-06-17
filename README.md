@@ -83,6 +83,8 @@ pi -e /home/christof21/Projects/pi-telegram/index.ts
 | `/tgreconnect` | Force a long-poll reconnect |
 | `/tgapprove [clear]` | Show / clear the always-allow list |
 | `/tgweather <location>` | Get current weather + today's high/low via Open-Meteo |
+| `/tgweather-setdefault <location>` | Set default location for bare "what's the weather?" queries |
+| `/tgweather-cleargetdefault` | Clear the default weather location |
 | `/telegram-setup` | One-shot config (token + chat id) |
 | `/abort` `/compact` `/new` `/model` `/thinking` `/queue` `/status` | pi core commands (forwarded) |
 
@@ -93,6 +95,10 @@ Casual weather queries are intercepted before they reach the LLM:
 - "what's the weather in London?"
 - "weather in Tokyo"
 - "/tgweather Paris, France"
+
+If you ask "what's the weather?" without a location, the bot uses your
+default location (set via `/tgweather-setdefault`). If no default is set,
+it asks you for one.
 
 Data comes from [Open-Meteo](https://open-meteo.com) — no API key, no
 rate-limit anxiety, no config. If the location is ambiguous, the reply

@@ -30,6 +30,7 @@ import {
 	queueBrowserMarkup,
 } from "./inline.js";
 import { loadAlwaysAllow, saveAlwaysAllow } from "./inline.js";
+import { readDefaultLocation, saveDefaultLocation } from "./config.js";
 import { weatherReply } from "./weather.js";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
@@ -247,7 +248,7 @@ export function approveClearBody(): string {
 
 export type CommandName =
 	| "tgstatus" | "tgabort" | "tgqueue" | "tgmodel" | "tgthinking"
-	| "tgtools" | "tgnew" | "tgcompact" | "tgreconnect" | "tgapprove" | "tgweather"
+	| "tgtools" | "tgnew" | "tgcompact" | "tgreconnect" | "tgapprove" | "tgweather" | "tgweather-setdefault" | "tgweather-cleargetdefault"
 	| "model" | "thinking" | "queue" | "status" | "compact" | "new" | "abort" | "modelpage";
 
 /**
@@ -350,6 +351,19 @@ export async function dispatchTelegramCommand(
 			} catch (err) {
 				return { text: `❌ Weather lookup failed: ${(err as Error).message}` };
 			}
+		}
+		case "tgweather-setdefault": {
+			const loc = args.trim();
+			if (!loc) {
+				const current = readDefaultLocation();
+				return { text: current ? `Default weather location: ${current}` : "No default weather location set. Usage: /tgweather-setdefault \u003clocation\u003e" };
+			}
+			saveDefaultLocation(loc);
+			return { text: `✓ Default weather location set to: ${loc}` };
+		}
+		case "tgweather-cleargetdefault": {
+			saveDefaultLocation(undefined);
+			return { text: "✓ Default weather location cleared" };
 		}
 	}
 }

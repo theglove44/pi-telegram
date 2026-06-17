@@ -97,6 +97,8 @@ export interface TgConfig {
 	botId?: number;
 	allowedChatId: number;     // Hard allowlist; only this chat id may drive the bot
 	lastUpdateId: number;      // Long-poll offset
+	/** Default location for bare weather queries. */
+	defaultLocation?: string;
 }
 
 /** What's stored in telegram.json (no secrets). */
@@ -105,6 +107,8 @@ export interface TgConfigFile {
 	botId?: number;
 	allowedChatId: number;
 	lastUpdateId: number;
+	/** Default location for bare weather queries (e.g. "Rochdale"). */
+	defaultLocation?: string;
 }
 
 /** A queued user-supplied prompt waiting to be dispatched to pi. */

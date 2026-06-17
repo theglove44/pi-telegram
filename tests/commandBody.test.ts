@@ -214,6 +214,21 @@ test("dispatchTelegramCommand: tgweather returns not-found for bogus location", 
 	assert.match(r.text, /Couldn't find/);
 });
 
+test("dispatchTelegramCommand: tgweather-setdefault sets the default", async () => {
+	const { ctx } = makeCtx();
+	const r = await dispatchTelegramCommand("tgweather-setdefault", "Rochdale", ctx);
+	assert.match(r.text, /Default weather location set to: Rochdale/);
+});
+
+test("dispatchTelegramCommand: tgweather-cleargetdefault clears the default", async () => {
+	const { ctx } = makeCtx();
+	await dispatchTelegramCommand("tgweather-setdefault", "Rochdale", ctx);
+	const r = await dispatchTelegramCommand("tgweather-cleargetdefault", "", ctx);
+	assert.match(r.text, /cleared/);
+	const r2 = await dispatchTelegramCommand("tgweather-setdefault", "", ctx);
+	assert.match(r2.text, /No default/);
+});
+
 test("dispatchTgCmdCallback: tgcmd:model:apply sets the model", async () => {
 	const { ctx, setModel } = makeCtx();
 	const r = await dispatchTgCmdCallback("tgcmd:model:openai/gpt-4o", ctx);
