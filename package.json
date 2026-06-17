@@ -1,0 +1,35 @@
+{
+  "name": "pi-telegram",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Telegram runtime adapter for pi (in-house, security-first).",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "test": "tsx --test --test-force-exit tests/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "index.ts",
+    "src/",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.79.4",
+    "@sinclair/typebox": "^0.34.49",
+    "@types/node": "^25.9.3",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}
