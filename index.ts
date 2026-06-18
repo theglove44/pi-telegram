@@ -47,7 +47,7 @@ import {
 	type CommandCtx,
 	type ModelRegistryLike,
 } from "./src/commandBody.js";
-import { extractLocation, isForecastQuery, weatherReplyRich, weatherReplyForecastRich } from "./src/weather.js";
+import { extractLocation, isForecastQuery, parseForecastTarget, weatherReplyRich, weatherReplyForecastRich, weatherReplyForecastDayRich } from "./src/weather.js";
 import { plainFromRichHtml } from "./src/richMessage.js";
 
 export default function (pi: ExtensionAPI): void {
@@ -332,7 +332,12 @@ async function handleUpdate(
 		}
 		try {
 			try { await client.sendChatAction(chatId, "typing"); } catch { /* ignore */ }
-			const rich = await weatherReplyForecastRich(forecastLocation);
+			// If the query targets a specific day (e.g. "this Sunday",
+			// "tomorrow"), return just that day; otherwise the 7-day window.
+			const target = parseForecastTarget(text);
+			const rich = target
+				? await weatherReplyForecastDayRich(forecastLocation, target)
+				: await weatherReplyForecastRich(forecastLocation);
 			try { await client.sendRichMessage(chatId, rich); } catch (err) {
 				console.warn(`[pi-telegram] sendRichMessage failed, falling back: ${(err as Error).message}`);
 				try { await client.sendMessage(chatId, plainFromRichHtml(rich.html ?? ""), {}); } catch { /* ignore */ }

@@ -20,8 +20,11 @@ import {
 	weatherReplyForecast,
 	weatherReplyRich,
 	weatherReplyForecastRich,
+	weatherReplyForecastDayRich,
 	describeWeatherCode,
 	isForecastQuery,
+	parseForecastTarget,
+	selectForecastDay,
 	type GeocodeResult,
 	type ForecastDay,
 } from "../src/weather.ts";
@@ -469,4 +472,73 @@ test("weatherReplyForecastRich returns an error rich message when geocoding miss
 	const rich = await weatherReplyForecastRich("Nowheresville", fetchImpl);
 	assert.ok(rich.html);
 	assert.match(rich.html!, /Couldn't find a location/);
+});
+
+test("parseForecastTarget extracts weekday and relative targets", () => {
+	assert.deepEqual(parseForecastTarget("forecast for this Sunday"), { weekday: 0 });
+	assert.deepEqual(parseForecastTarget("weather forecast for Monday"), { weekday: 1 });
+	assert.deepEqual(parseForecastTarget("what's the weather in London next Friday?"), { weekday: 5 });
+	assert.deepEqual(parseForecastTarget("weather tomorrow"), { relative: "tomorrow" });
+	assert.deepEqual(parseForecastTarget("what's the weather today?"), { relative: "today" });
+	// Multi-day phrases have no specific target.
+	assert.equal(parseForecastTarget("forecast for this week"), null);
+	assert.equal(parseForecastTarget("weekly forecast Tokyo"), null);
+	assert.equal(parseForecastTarget("forecast"), null);
+});
+
+test("selectForecastDay picks the right day from a 7-day window", () => {
+	// 2026-06-17 is a Wednesday; window Wed..Tue (getDay: 3,4,5,6,0,1,2).
+	const days: ForecastDay[] = ["2026-06-17","2026-06-18","2026-06-19","2026-06-20","2026-06-21","2026-06-22","2026-06-23"]
+		.map((d) => ({ date: d, max: 20, min: 10, weatherCode: 0 }));
+	assert.equal(selectForecastDay(days, { relative: "today" })?.date, "2026-06-17");
+	assert.equal(selectForecastDay(days, { relative: "tomorrow" })?.date, "2026-06-18");
+	// First Sunday in the window is 2026-06-21; Friday is 2026-06-19.
+	assert.equal(selectForecastDay(days, { weekday: 0 })?.date, "2026-06-21");
+	assert.equal(selectForecastDay(days, { weekday: 5 })?.date, "2026-06-19");
+});
+
+test("weatherReplyForecastDayRich returns a single-day card for a weekday target", async () => {
+	// 2026-06-17 (Wed) window; Sunday target -> 2026-06-21.
+	const fetchImpl = makeFetch({
+		geocode: { results: [{ name: "Paris", country: "France", latitude: 48.85, longitude: 2.35 }] },
+		forecast: {
+			daily: {
+				time: ["2026-06-17","2026-06-18","2026-06-19","2026-06-20","2026-06-21","2026-06-22","2026-06-23"],
+				temperature_2m_max: [20, 21, 22, 23, 24, 25, 26],
+				temperature_2m_min: [10, 11, 12, 13, 14, 15, 16],
+				weather_code: [0, 1, 2, 3, 61, 63, 45],
+			},
+		},
+	});
+	const rich = await weatherReplyForecastDayRich("Paris", { weekday: 0 }, fetchImpl);
+	assert.ok(rich.html);
+	assert.match(rich.html!, /<h1>Forecast for Paris, France<\/h1>/);
+	// Sunday's caption should appear, with Sunday's high (24.0°C).
+	assert.match(rich.html!, /<caption>Sunday 21 Jun<\/caption>/);
+	assert.match(rich.html!, /24\.0°C/);
+	assert.match(rich.html!, /14\.0°C/);
+	// Must be a single-day card, not the 7-day table.
+	assert.doesNotMatch(rich.html!, /7-day forecast/);
+});
+
+test("weatherReplyForecastDayRich handles a day outside the 7-day window", async () => {
+	const fetchImpl = makeFetch({
+		geocode: { results: [{ name: "Paris", country: "France", latitude: 48.85, longitude: 2.35 }] },
+		forecast: { daily: { time: ["2026-06-17"], temperature_2m_max: [20], temperature_2m_min: [10], weather_code: [0] } },
+	});
+	// No Saturday in a one-day Wed window.
+	const rich = await weatherReplyForecastDayRich("Paris", { weekday: 6 }, fetchImpl);
+	assert.ok(rich.html);
+	assert.match(rich.html!, /No forecast available for that day/);
+});
+
+test("isForecastQuery treats 'weather tomorrow' as a forecast query", () => {
+	const m1 = isForecastQuery("weather tomorrow");
+	assert.ok(m1);
+	assert.equal(m1!.location, undefined);
+	const m2 = isForecastQuery("what's the weather in London tomorrow?");
+	assert.ok(m2);
+	assert.equal(m2!.location, "London");
+	// 'today' stays a current-weather request, not a forecast.
+	assert.equal(isForecastQuery("what's the weather today?"), null);
 });

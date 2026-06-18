@@ -10,7 +10,7 @@
  * All outbound calls use the native `fetch` available in Node 22+.
  */
 
-import { buildForecastRichMessage, buildWeatherRichMessage, type RichForecastRow } from "./richMessage.js";
+import { buildForecastDayRichMessage, buildForecastRichMessage, buildWeatherRichMessage, type RichForecastRow } from "./richMessage.js";
 import type { InputRichMessage } from "./types.js";
 
 export interface GeocodeResult {
@@ -58,8 +58,71 @@ export interface ForecastQueryMatch {
 	location?: string;
 }
 
-/**
- * Detect whether a text asks for a multi-day forecast.
+/** A specific day targeted by a forecast query, if any.
+ *  `weekday` is 0=Sun..6=Sat (matching `Date.getDay()`). `relative` covers
+ *  today/tomorrow. When both are absent the query wants the full 7-day window. */
+export interface ForecastTarget {
+	weekday?: number;
+	relative?: "today" | "tomorrow";
+}
+
+const WEEKDAY_TO_DAY: Array<{ re: RegExp; day: number }> = [
+	{ re: /^sun(?:day)?$/i, day: 0 },
+	{ re: /^mon(?:day)?$/i, day: 1 },
+	{ re: /^tue(?:sday)?$/i, day: 2 },
+	{ re: /^wed(?:nesday)?$/i, day: 3 },
+	{ re: /^thu(?:rsday)?$/i, day: 4 },
+	{ re: /^fri(?:day)?$/i, day: 5 },
+	{ re: /^sat(?:urday)?$/i, day: 6 },
+];
+
+function weekdayNameToDay(name: string): number | undefined {
+	const n = name.trim().toLowerCase();
+	for (const w of WEEKDAY_TO_DAY) if (w.re.test(n)) return w.day;
+	return undefined;
+}
+
+/** Extract a specific target day from a forecast query, if any.
+ *
+ * Returns null for multi-day phrases ("this week", "this weekend", "next few
+ * days", bare "forecast") so the caller returns the full 7-day window.
+ *
+ * Examples:
+ *   "forecast for this Sunday"  -> { weekday: 0 }
+ *   "weather tomorrow"           -> { relative: "tomorrow" }
+ *   "what's the weather today?"  -> { relative: "today" }
+ *   "forecast for this week"     -> null
+ *   "weekly forecast Tokyo"      -> null
+ */
+export function parseForecastTarget(text: string): ForecastTarget | null {
+	const t = text.trim().replace(/[“”"'‘’]/g, "");
+
+	// today / tomorrow
+	const rel = t.match(/\b(today|tomorrow)\b/i);
+	if (rel) return { relative: rel[1]!.toLowerCase() as "today" | "tomorrow" };
+
+	// weekday with an optional qualifier (this/next/coming/on/for/over the)
+	const weekdayRe = /\b(?:this\s+coming\s+|this\s+|next\s+|coming\s+|on\s+|for\s+|over\s+the\s+)?(sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/i;
+	const m = t.match(weekdayRe);
+	if (m) {
+		const day = weekdayNameToDay(m[1] ?? "");
+		if (day !== undefined) return { weekday: day };
+	}
+	return null;
+}
+
+/** Select the forecast day matching a target from a 7-day window.
+ *  Returns null when the requested day isn't within the window. */
+export function selectForecastDay(days: ForecastDay[], target: ForecastTarget): ForecastDay | null {
+	if (target.relative === "today") return days[0] ?? null;
+	if (target.relative === "tomorrow") return days[1] ?? null;
+	if (target.weekday !== undefined) {
+		return days.find((d) => new Date(d.date + "T12:00:00").getDay() === target.weekday) ?? null;
+	}
+	return null;
+}
+
+/** Detect whether a text asks for a multi-day forecast.
  *
  * Matches patterns like:
  *   "forecast"
@@ -150,6 +213,12 @@ export function isForecastQuery(text: string): ForecastQueryMatch | null {
 	// "weather [in location] <weekday-phrase>"  e.g. "weather in London this Sunday",
 	// "what's the weather this Sunday?", "weather forecast for Sunday".
 	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?))?\s*(?:this\s+coming\s+|this\s+|next\s+|coming\s+|on\s+|for\s+|over\s+the\s+)?(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)\??$/i);
+	if (m) return { text: t, location: loc(m[1]) };
+
+	// "weather [in location] tomorrow"  e.g. "weather tomorrow", "what's the
+	// weather in London tomorrow?". ("today" is intentionally NOT matched here —
+	// "what's the weather today?" stays a current-weather request.)
+	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?))?\s*tomorrow\??$/i);
 	if (m) return { text: t, location: loc(m[1]) };
 
 	// Bare "forecast" or "weekly forecast" (no location phrase)
@@ -368,6 +437,56 @@ export async function weatherReplyForecastRich(query: string, fetchImpl: typeof 
 	}
 	const forecast = await fetchForecast(loc, fetchImpl);
 	return formatForecastRich(forecast, query);
+}
+
+/** Format a single forecast day as a Rich Message payload. */
+export function formatForecastDayRich(result: ForecastResult, day: ForecastDay, query?: string): InputRichMessage {
+	const region = [result.location.name, result.location.admin1, result.location.country].filter(Boolean).join(", ");
+	const date = new Date(day.date + "T12:00:00");
+	const dayName = date.toLocaleDateString("en-GB", { weekday: "long" });
+	const dateStr = date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+	return buildForecastDayRichMessage({
+		region,
+		day: {
+			day: `${dayName} ${dateStr}`,
+			conditions: describeWeatherCode(day.weatherCode),
+			high: `${day.max.toFixed(1)}°C`,
+			low: `${day.min.toFixed(1)}°C`,
+		},
+		query,
+	});
+}
+
+/**
+ * Resolve a free-text location + target day into a single-day Rich Message
+ * forecast reply. Returns a "no data" card when the requested day is outside
+ * the 7-day forecast window or the location can't be found.
+ */
+export async function weatherReplyForecastDayRich(
+	query: string,
+	target: ForecastTarget,
+	fetchImpl: typeof fetch = fetch,
+): Promise<InputRichMessage> {
+	const loc = await geocodeLocation(query, fetchImpl);
+	const notFound = `❌ Couldn't find a location matching "${query}". Try "/tgweather forecast City, Country".`;
+	if (!loc) {
+		return buildForecastDayRichMessage({
+			region: "Unknown",
+			day: { day: "", conditions: notFound, high: "", low: "" },
+			query,
+		});
+	}
+	const region = [loc.name, loc.admin1, loc.country].filter(Boolean).join(", ");
+	const forecast = await fetchForecast(loc, fetchImpl);
+	const day = selectForecastDay(forecast.days, target);
+	if (!day) {
+		return buildForecastDayRichMessage({
+			region,
+			day: { day: "", conditions: "❌ No forecast available for that day — it's beyond the 7-day forecast window.", high: "", low: "" },
+			query,
+		});
+	}
+	return formatForecastDayRich(forecast, day, query);
 }
 
 /**

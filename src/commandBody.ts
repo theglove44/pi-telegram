@@ -31,7 +31,7 @@ import {
 } from "./inline.js";
 import { loadAlwaysAllow, saveAlwaysAllow } from "./inline.js";
 import { readDefaultLocation, saveDefaultLocation } from "./config.js";
-import { isForecastQuery, weatherReplyRich, weatherReplyForecastRich } from "./weather.js";
+import { isForecastQuery, parseForecastTarget, weatherReplyRich, weatherReplyForecastRich, weatherReplyForecastDayRich } from "./weather.js";
 import { plainFromRichHtml } from "./richMessage.js";
 import type { InputRichMessage } from "./types.js";
 
@@ -370,7 +370,12 @@ export async function dispatchTelegramCommand(
 				const loc = forecastMatch.location || readDefaultLocation();
 				if (!loc) return { text: "❌ Tell me the location. Usage: /tgweather forecast London" };
 				try {
-					const rich = await weatherReplyForecastRich(loc);
+					// If the query targets a specific day (e.g. "this Sunday",
+					// "tomorrow"), return just that day; otherwise the 7-day window.
+					const target = parseForecastTarget(query);
+					const rich = target
+						? await weatherReplyForecastDayRich(loc, target)
+						: await weatherReplyForecastRich(loc);
 					return { text: plainFromRichHtml(rich.html ?? ""), richMessage: rich };
 				} catch (err) {
 					return { text: `❌ Forecast lookup failed: ${(err as Error).message}` };

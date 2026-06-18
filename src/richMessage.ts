@@ -162,6 +162,14 @@ export interface RichForecastRow {
 	low: string;
 }
 
+/** A single targeted forecast day, formatted for a one-day card. */
+export interface RichForecastDay {
+	day: string;        // e.g. "Sunday 22 Jun"
+	conditions: string;
+	high: string;
+	low: string;
+}
+
 /** Build the Rich HTML payload for a 7-day forecast reply. */
 export function buildForecastRichMessage(opts: {
 	region: string;
@@ -187,6 +195,36 @@ export function buildForecastRichMessage(opts: {
 	const blocks: string[] = [
 		h(1, `Forecast for ${opts.region}`),
 		forecastTable,
+		divider(),
+	];
+
+	if (opts.query && opts.query.trim().toLowerCase() !== opts.region.toLowerCase()) {
+		blocks.push(footer(italic(`Query: ${opts.query}`)));
+	}
+
+	return richHtml(...blocks);
+}
+
+/** Build the Rich HTML payload for a single-day forecast card. */
+export function buildForecastDayRichMessage(opts: {
+	region: string;
+	day: RichForecastDay;
+	query?: string;
+}): InputRichMessage {
+	const metrics = table({
+		caption: opts.day.day || undefined,
+		isBordered: true,
+		isStriped: true,
+		rows: [
+			["Conditions", escapeRichHtml(opts.day.conditions)],
+			["High", bold(escapeRichHtml(opts.day.high))],
+			["Low", escapeRichHtml(opts.day.low)],
+		],
+	});
+
+	const blocks: string[] = [
+		h(1, `Forecast for ${opts.region}`),
+		metrics,
 		divider(),
 	];
 
