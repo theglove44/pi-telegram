@@ -280,6 +280,44 @@ test("isForecastQuery treats time-only phrases as no location", () => {
 	assert.equal(m7!.location, undefined);
 });
 
+test("isForecastQuery treats weekday phrases as temporal-only (default location)", () => {
+	// Bare weekday phrases fall back to the default location.
+	const a1 = isForecastQuery("what's the weather forecast for this Sunday?");
+	assert.ok(a1);
+	assert.equal(a1!.location, undefined);
+
+	const a2 = isForecastQuery("weather forecast for Sunday");
+	assert.ok(a2);
+	assert.equal(a2!.location, undefined);
+
+	const a3 = isForecastQuery("forecast for next Monday");
+	assert.ok(a3);
+	assert.equal(a3!.location, undefined);
+
+	const a4 = isForecastQuery("weather this Friday");
+	assert.ok(a4);
+	assert.equal(a4!.location, undefined);
+
+	// Location + weekday: the weekday is stripped, the location is kept.
+	const b1 = isForecastQuery("what's the weather in London this Sunday?");
+	assert.ok(b1);
+	assert.equal(b1!.location, "London");
+
+	const b2 = isForecastQuery("forecast for Rochdale this Sunday");
+	assert.ok(b2);
+	assert.equal(b2!.location, "Rochdale");
+
+	const b3 = isForecastQuery("what's the weather in Paris next Saturday?");
+	assert.ok(b3);
+	assert.equal(b3!.location, "Paris");
+});
+
+test("extractLocation strips trailing temporal phrases", () => {
+	assert.equal(extractLocation("what's the weather in London today?"), "London");
+	assert.equal(extractLocation("weather in Paris right now"), "Paris");
+	assert.equal(extractLocation("what's the weather in Manchester this Sunday?"), "Manchester");
+});
+
 test("fetchForecast returns 7 days of forecast data", async () => {
 	const location: GeocodeResult = { name: "Berlin", country: "Germany", latitude: 52.52, longitude: 13.41 };
 	const fetchImpl = makeFetch({

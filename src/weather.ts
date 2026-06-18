@@ -71,23 +71,69 @@ export interface ForecastQueryMatch {
  *
  * Returns a {@link ForecastQueryMatch} with an optional extracted location,
  * or null if the text is not a forecast query. Time-only phrases such as
- * "today" or "this week" are treated as if no location was given so the
- * configured default location can be used.
+ * "today", "this week" or "this Sunday" are treated as if no location was
+ * given so the configured default location can be used.
  */
+
+// Weekday names with common abbreviations.
+const WEEKDAY = "(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)";
+
+// A captured location phrase that is *entirely* temporal (no real place).
+// Covers weekdays (with this/next/coming/on/for/over the qualifiers) plus
+// the week/weekend/today/tomorrow family.
+const TEMPORAL_ONLY_RE = new RegExp(
+	"^\\s*(?:" +
+		"(?:this\\s+coming\\s+|this\\s+|next\\s+|coming\\s+|on\\s+|for\\s+|over\\s+the\\s+)?" + WEEKDAY + "" +
+		"|today|tomorrow|tonight|now" +
+		"|this\\s+week|next\\s+week" +
+		"|this\\s+weekend|next\\s+weekend|the\\s+weekend" +
+		"|next\\s+(?:few|couple(?:\\s+of)?)\\s+days" +
+		"|the\\s+week|the\\s+next\\s+(?:few|couple(?:\\s+of)?)\\s+days|for\\s+(?:the|this)\\s+(?:week|weekend)" +
+	")\\s*\\??$",
+	"i",
+);
+
+/** Strip temporal phrases (weekdays, week/weekend, today/tomorrow) and
+ * leftover connectors from a captured location phrase. Returns the
+ * residual location, or undefined when nothing real remains — so the caller
+ * falls back to the configured default location.
+ *
+ * Examples:
+ *   "this Sunday"        -> undefined
+ *   "Sunday"             -> undefined
+ *   "next Monday"        -> undefined
+ *   "Rochdale this Sunday" -> "Rochdale"
+ *   "this Sunday in London" -> "London"
+ *   "London"             -> "London"
+ *   "London this week"   -> "London"
+ *   ""                   -> undefined
+ */
+function stripTemporal(s: string | undefined): string | undefined {
+	if (!s) return undefined;
+	let v = s.replace(/\?+$/g, "").trim();
+	// Drop weekday-based temporal chunks (with optional qualifiers).
+	const weekdayChunk = new RegExp(
+		"\\s*\\b(?:this\\s+coming\\s+|this\\s+|next\\s+|coming\\s+|on\\s+|for\\s+|over\\s+the\\s+)?" + WEEKDAY + "\\b\\s*",
+		"gi",
+	);
+	v = v.replace(weekdayChunk, " ");
+	// Drop standalone week/weekend/today phrases.
+	v = v.replace(
+		/\b(?:today|tomorrow|tonight|now|this\s+week|next\s+week|this\s+weekend|next\s+weekend|the\s+weekend|the\s+week|the\s+next\s+(?:few|couple(?:\s+of)?)\s+days|next\s+(?:few|couple(?:\s+of)?)\s+days)\b/gi,
+		" ",
+	);
+	// Drop leftover leading/trailing connectors.
+	v = v.replace(/^\s*(?:in|for|on|at|of)\s+/i, "").replace(/\s+(?:in|for|on|at)\s*$/i, " ");
+	v = v.replace(/\s{2,}/g, " ").trim();
+	if (!v) return undefined;
+	if (TEMPORAL_ONLY_RE.test(v)) return undefined;
+	return v;
+}
+
 export function isForecastQuery(text: string): ForecastQueryMatch | null {
 	const t = text.trim().replace(/[“”"'‘’]/g, "");
 
-	// Captured phrases that are only a temporal qualifier, not a place.
-	const TEMPORAL_ONLY = /^(?:today|tomorrow|tonight|now|this\s+week|next\s+week|this\s+weekend|next\s+weekend|the\s+weekend|next\s+(?:few|couple(?:\s+of)?)\s+days|the\s+week|the\s+next\s+(?:few|couple(?:\s+of)?)\s+days|for\s+(?:the|this)\s+(?:week|weekend))$/i;
-
-	// Helper: strip trailing question marks from captured location.
-	const loc = (s: string | undefined): string | undefined => {
-		const v = s?.replace(/\?+\s*$/, "").trim();
-		if (!v) return undefined;
-		// If the captured phrase is only a time qualifier, rely on default location.
-		if (TEMPORAL_ONLY.test(v)) return undefined;
-		return v;
-	};
+	const loc = (s: string | undefined): string | undefined => stripTemporal(s);
 
 	// "forecast [for] [location]" or "[location] forecast"
 	let m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?(?:weekly\s+)?forecast\s*(?:for\s+)?(.+?)$/i);
@@ -99,6 +145,11 @@ export function isForecastQuery(text: string): ForecastQueryMatch | null {
 
 	// "weather [in location] this week / next week / next few days / for the week / for this week"
 	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?))?\s*(?:this\s+week|next\s+(?:week|few\s+days|couple\s+of\s+days)|for\s+(?:the\s+|this\s+)?(?:week|next\s+\d+\s+days))\??$/i);
+	if (m) return { text: t, location: loc(m[1]) };
+
+	// "weather [in location] <weekday-phrase>"  e.g. "weather in London this Sunday",
+	// "what's the weather this Sunday?", "weather forecast for Sunday".
+	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?))?\s*(?:this\s+coming\s+|this\s+|next\s+|coming\s+|on\s+|for\s+|over\s+the\s+)?(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)\??$/i);
 	if (m) return { text: t, location: loc(m[1]) };
 
 	// Bare "forecast" or "weekly forecast" (no location phrase)
@@ -115,17 +166,19 @@ export function isForecastQuery(text: string): ForecastQueryMatch | null {
  *   "what's the weather?" -> null
  *   "what's the weather in London?" -> "London"
  *   "weather in New York" -> "New York"
- *   "how's the weather like in Paris today?" -> "Paris today"
+ *   "how's the weather like in Paris today?" -> "Paris"
  *
- * NOTE: does NOT match forecast keywords ("this week", "next week") —
- * those are handled by {@link isForecastQuery}.
+ * Temporal phrases (weekdays, this week, today, ...) are stripped from the
+ * captured location so they never get sent to the geocoder. NOTE: forecast
+ * keywords ("this week", "this Sunday", ...) are handled by
+ * {@link isForecastQuery}, which is checked first by the caller.
  */
 export function extractLocation(text: string): string | null {
 	const t = text.trim().replace(/[“”"'‘’]/g, "");
-	const m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?)|$)(?:\s*(?:today|now|currently|right now|at the moment))?\??$/i);
+	const m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?)|$)(?:\s*(?:today|now|currently|right\s+now|at\s+the\s+moment))?\??$/i);
 	if (!m) return null;
-	const loc = (m[1] ?? "").trim();
-	return loc || null;
+	const stripped = stripTemporal(m[1] ?? "");
+	return stripped ?? null;
 }
 
 /**
