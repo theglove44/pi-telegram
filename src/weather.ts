@@ -78,7 +78,7 @@ export function isForecastQuery(text: string): ForecastQueryMatch | null {
 	const t = text.trim().replace(/[“”"'‘’]/g, "");
 
 	// Captured phrases that are only a temporal qualifier, not a place.
-	const TEMPORAL_ONLY = /^(?:today|tomorrow|tonight|now|this\s+week|next\s+week|next\s+(?:few|couple(?:\s+of)?)\s+days|the\s+week|the\s+next\s+(?:few|couple(?:\s+of)?)\s+days|for\s+(?:the|this)\s+week)$/i;
+	const TEMPORAL_ONLY = /^(?:today|tomorrow|tonight|now|this\s+week|next\s+week|this\s+weekend|next\s+weekend|the\s+weekend|next\s+(?:few|couple(?:\s+of)?)\s+days|the\s+week|the\s+next\s+(?:few|couple(?:\s+of)?)\s+days|for\s+(?:the|this)\s+(?:week|weekend))$/i;
 
 	// Helper: strip trailing question marks from captured location.
 	const loc = (s: string | undefined): string | undefined => {

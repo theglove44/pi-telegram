@@ -269,6 +269,15 @@ test("isForecastQuery treats time-only phrases as no location", () => {
 	const m5 = isForecastQuery("What’s the weather forecast for today?");
 	assert.ok(m5);
 	assert.equal(m5!.location, undefined);
+
+	// Weekend phrasing falls back to the default location.
+	const m6 = isForecastQuery("What's the weather forecast for the weekend?");
+	assert.ok(m6);
+	assert.equal(m6!.location, undefined);
+
+	const m7 = isForecastQuery("forecast for next weekend");
+	assert.ok(m7);
+	assert.equal(m7!.location, undefined);
 });
 
 test("fetchForecast returns 7 days of forecast data", async () => {
