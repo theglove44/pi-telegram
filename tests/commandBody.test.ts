@@ -9,6 +9,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TurnQueue } from "../src/queue.ts";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	dispatchTelegramCommand,
 	dispatchTgCmdCallback,
@@ -21,6 +24,14 @@ import {
 	type CommandCtx,
 	type ModelRegistryLike,
 } from "../src/commandBody.ts";
+
+// Isolate config writes from the real ~/.pi/agent/telegram.json. These
+// tests call saveDefaultLocation() (via /tgweather-setdefault and
+// /tgweather-cleargetdefault), which would otherwise clobber the user's live
+// bot config — including wiping a saved default location. configFilePath()
+// reads PI_AGENT_DIR at call time, so setting it here (before any test body
+// runs) is sufficient.
+process.env.PI_AGENT_DIR = mkdtempSync(join(tmpdir(), "pi-tg-cmd-test-"));
 
 function makeCtx(overrides?: Partial<CommandCtx>): { ctx: CommandCtx; setModel: ReturnType<typeof makeSetModel>; notifyCalls: Array<{ text: string; level: string }> } {
 	const setModel = makeSetModel();
