@@ -542,3 +542,30 @@ test("isForecastQuery treats 'weather tomorrow' as a forecast query", () => {
 	// 'today' stays a current-weather request, not a forecast.
 	assert.equal(isForecastQuery("what's the weather today?"), null);
 });
+
+test("isForecastQuery handles stacked qualifiers like 'for this coming Sunday'", () => {
+	// Reported bug: "for this coming Sunday" has two stacked qualifiers and was
+	// not recognised, so it fell through to current weather instead of a forecast.
+	const m1 = isForecastQuery("what's the weather for this coming Sunday");
+	assert.ok(m1);
+	assert.equal(m1!.location, undefined);
+	const m2 = isForecastQuery("what's the weather for this coming Sunday?");
+	assert.ok(m2);
+	assert.equal(m2!.location, undefined);
+	const m3 = isForecastQuery("weather for this coming Friday");
+	assert.ok(m3);
+	assert.equal(m3!.location, undefined);
+	// Location + stacked qualifier: the qualifier words must not eat into the
+	// location name (e.g. the "on" in "London").
+	const m4 = isForecastQuery("what's the weather for London this coming Sunday");
+	assert.ok(m4);
+	assert.equal(m4!.location, "London");
+	const m5 = isForecastQuery("weather in London this Sunday");
+	assert.ok(m5);
+	assert.equal(m5!.location, "London");
+});
+
+test("isForecastQuery keeps 'for today' as a current-weather request", () => {
+	assert.equal(isForecastQuery("what's the weather for today"), null);
+	assert.equal(isForecastQuery("what's the weather today?"), null);
+});

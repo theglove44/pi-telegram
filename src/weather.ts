@@ -185,6 +185,10 @@ function stripTemporal(s: string | undefined): string | undefined {
 		/\b(?:today|tomorrow|tonight|now|this\s+week|next\s+week|this\s+weekend|next\s+weekend|the\s+weekend|the\s+week|the\s+next\s+(?:few|couple(?:\s+of)?)\s+days|next\s+(?:few|couple(?:\s+of)?)\s+days)\b/gi,
 		" ",
 	);
+	// Drop bare temporal qualifier words ("this", "next", "coming", "the",
+	// "over") that remain after the weekday/week chunks are removed — e.g. a
+	// "for this coming Sunday" query leaves "this" as the captured "location".
+	v = v.replace(/\b(?:this|next|coming|the|over)\b/gi, " ");
 	// Drop leftover leading/trailing connectors.
 	v = v.replace(/^\s*(?:in|for|on|at|of)\s+/i, "").replace(/\s+(?:in|for|on|at)\s*$/i, " ");
 	v = v.replace(/\s{2,}/g, " ").trim();
@@ -210,9 +214,12 @@ export function isForecastQuery(text: string): ForecastQueryMatch | null {
 	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?))?\s*(?:this\s+week|next\s+(?:week|few\s+days|couple\s+of\s+days)|for\s+(?:the\s+|this\s+)?(?:week|next\s+\d+\s+days))\??$/i);
 	if (m) return { text: t, location: loc(m[1]) };
 
-	// "weather [in location] <weekday-phrase>"  e.g. "weather in London this Sunday",
-	// "what's the weather this Sunday?", "weather forecast for Sunday".
-	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?))?\s*(?:this\s+coming\s+|this\s+|next\s+|coming\s+|on\s+|for\s+|over\s+the\s+)?(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)\??$/i);
+	// "weather [in|for location] <weekday-phrase>"  e.g. "weather in London
+	// this Sunday", "what's the weather for this coming Sunday?", "weather
+	// forecast for Sunday". Qualifier words may stack ("for this coming") and
+	// are wrapped in \b so they don't match inside location names (e.g. the
+	// "on" in "London"). The location preposition accepts both "in" and "for".
+	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:(?:in|for)\s+(.+?))?\s*(?:\b(?:this\s+coming|this|next|coming|on|for|over\s+the|the)\b\s+)*\b(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)\b\??$/i);
 	if (m) return { text: t, location: loc(m[1]) };
 
 	// "weather [in location] tomorrow"  e.g. "weather tomorrow", "what's the
