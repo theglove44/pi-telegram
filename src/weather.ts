@@ -67,21 +67,34 @@ export interface ForecastQueryMatch {
  *   "what's the weather in London this week?"
  *   "weather in Paris next few days"
  *   "weekly forecast Tokyo"
+ *   "what's the weather forecast for today?"
  *
  * Returns a {@link ForecastQueryMatch} with an optional extracted location,
- * or null if the text is not a forecast query.
+ * or null if the text is not a forecast query. Time-only phrases such as
+ * "today" or "this week" are treated as if no location was given so the
+ * configured default location can be used.
  */
 export function isForecastQuery(text: string): ForecastQueryMatch | null {
-	const t = text.trim().replace(/[“”"']/g, "");
+	const t = text.trim().replace(/[“”"'‘’]/g, "");
+
+	// Captured phrases that are only a temporal qualifier, not a place.
+	const TEMPORAL_ONLY = /^(?:today|tomorrow|tonight|now|this\s+week|next\s+week|next\s+(?:few|couple(?:\s+of)?)\s+days|the\s+week|the\s+next\s+(?:few|couple(?:\s+of)?)\s+days|for\s+(?:the|this)\s+week)$/i;
 
 	// Helper: strip trailing question marks from captured location.
 	const loc = (s: string | undefined): string | undefined => {
 		const v = s?.replace(/\?+\s*$/, "").trim();
-		return v || undefined;
+		if (!v) return undefined;
+		// If the captured phrase is only a time qualifier, rely on default location.
+		if (TEMPORAL_ONLY.test(v)) return undefined;
+		return v;
 	};
 
 	// "forecast [for] [location]" or "[location] forecast"
 	let m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?(?:weekly\s+)?forecast\s*(?:for\s+)?(.+?)$/i);
+	if (m) return { text: t, location: loc(m[1]) };
+
+	// "weather forecast [for] [location]" (e.g. "what's the weather forecast for today?")
+	m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?(?:weekly\s+)?weather\s+forecast\s*(?:for\s+)?(.+?)$/i);
 	if (m) return { text: t, location: loc(m[1]) };
 
 	// "weather [in location] this week / next week / next few days / for the week / for this week"
@@ -108,7 +121,7 @@ export function isForecastQuery(text: string): ForecastQueryMatch | null {
  * those are handled by {@link isForecastQuery}.
  */
 export function extractLocation(text: string): string | null {
-	const t = text.trim().replace(/[“”"']/g, "");
+	const t = text.trim().replace(/[“”"'‘’]/g, "");
 	const m = t.match(/^(?:what'?s|how'?s|what is|how is)?\s*(?:the\s+)?weather\s*(?:like\s+)?(?:in\s+(.+?)|$)(?:\s*(?:today|now|currently|right now|at the moment))?\??$/i);
 	if (!m) return null;
 	const loc = (m[1] ?? "").trim();

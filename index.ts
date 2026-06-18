@@ -143,6 +143,8 @@ export default function (pi: ExtensionAPI): void {
 						{ command: "tgreconnect", description: "Force a long-poll reconnect" },
 						{ command: "tgapprove", description: "Manage always-allow list" },
 						{ command: "tgweather", description: "Current weather or 7-day forecast (e.g. /tgweather forecast London)" },
+						{ command: "tgweather-setdefault", description: "Set a default weather location (e.g. /tgweather-setdefault Rochdale)" },
+						{ command: "tgweather-cleargetdefault", description: "Clear the default weather location" },
 					],
 				});
 				console.log("[pi-telegram] command menu registered with Telegram");
@@ -398,6 +400,7 @@ async function tryDispatchTelegramCommand(
 	const known = new Set([
 		"tgstatus", "tgabort", "tgqueue", "tgmodel", "tgthinking",
 		"tgtools", "tgnew", "tgcompact", "tgreconnect", "tgapprove", "tgweather",
+		"tgweather-setdefault", "tgweather-cleargetdefault",
 		"status", "abort", "queue", "model", "thinking", "compact", "new",
 	]);
 	if (!known.has(name)) return false;

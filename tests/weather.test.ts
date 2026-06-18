@@ -234,6 +234,43 @@ test("isForecastQuery detects weather + this week / next week / next few days", 
 	assert.equal(isForecastQuery("what's the weather?"), null);
 });
 
+test("isForecastQuery detects 'weather forecast' phrasing", () => {
+	const m1 = isForecastQuery("what's the weather forecast for London?");
+	assert.ok(m1);
+	assert.equal(m1!.location, "London");
+
+	const m2 = isForecastQuery("weather forecast Tokyo");
+	assert.ok(m2);
+	assert.equal(m2!.location, "Tokyo");
+
+	const m3 = isForecastQuery("what's the weather forecast?");
+	assert.ok(m3);
+	assert.equal(m3!.location, undefined);
+});
+
+test("isForecastQuery treats time-only phrases as no location", () => {
+	const m1 = isForecastQuery("what's the weather forecast for today?");
+	assert.ok(m1);
+	assert.equal(m1!.location, undefined);
+
+	const m2 = isForecastQuery("forecast for tomorrow");
+	assert.ok(m2);
+	assert.equal(m2!.location, undefined);
+
+	const m3 = isForecastQuery("weather forecast for next week");
+	assert.ok(m3);
+	assert.equal(m3!.location, undefined);
+
+	const m4 = isForecastQuery("forecast for now");
+	assert.ok(m4);
+	assert.equal(m4!.location, undefined);
+
+	// Curly apostrophe (common on iOS/macOS) should also match.
+	const m5 = isForecastQuery("What’s the weather forecast for today?");
+	assert.ok(m5);
+	assert.equal(m5!.location, undefined);
+});
+
 test("fetchForecast returns 7 days of forecast data", async () => {
 	const location: GeocodeResult = { name: "Berlin", country: "Germany", latitude: 52.52, longitude: 13.41 };
 	const fetchImpl = makeFetch({
