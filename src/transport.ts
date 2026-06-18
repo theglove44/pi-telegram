@@ -174,7 +174,7 @@ export class TelegramClient {
 		});
 	}
 
-	async editMessageText(chatId: number, messageId: number, text: string, opts?: { parseMode?: "HTML"; replyMarkup?: unknown; richMessage?: import("./types.js").InputRichMessage }): Promise<import("./types.js").TgMessage> {
+	async editMessageText(chatId: number, messageId: number | undefined, text: string, opts?: { parseMode?: "HTML"; replyMarkup?: unknown; richMessage?: import("./types.js").InputRichMessage }): Promise<import("./types.js").TgMessage> {
 		return this.call("editMessageText", {
 			chat_id: chatId,
 			message_id: messageId,

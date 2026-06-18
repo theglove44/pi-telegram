@@ -478,7 +478,7 @@ async function handleCallback(
 	// Approval buttons from src/inline.ts (app:yes:nonce / app:no:nonce / app:always:nonce).
 	// These resolve the pending askApproval() promise and let the tool_call handler proceed.
 	console.log(`[pi-telegram] approval callback: ${data}`);
-	const handled = await dispatchCallback(data);
+	const handled = await dispatchCallback(data, client, chatId);
 	if (!handled) {
 		console.warn(`[pi-telegram] no approval handler for callback: ${data}`);
 		try { await client.answerCallbackQuery(callbackQueryId, { text: "approval prompt expired or unknown", showAlert: true }); } catch { /* ignore */ }
