@@ -159,13 +159,29 @@ export class TelegramClient {
 		});
 	}
 
-	async editMessageText(chatId: number, messageId: number, text: string, opts?: { parseMode?: "HTML"; replyMarkup?: unknown }): Promise<import("./types.js").TgMessage> {
+	async sendRichMessage(chatId: number, richMessage: import("./types.js").InputRichMessage, opts?: { replyMarkup?: unknown }): Promise<import("./types.js").TgMessage> {
+		return this.call("sendRichMessage", {
+			chat_id: chatId,
+			rich_message: richMessage,
+			...(opts?.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
+		});
+	}
+
+	async sendRichMessageDraft(chatId: number, richMessage: import("./types.js").InputRichMessage): Promise<import("./types.js").TgMessage> {
+		return this.call("sendRichMessageDraft", {
+			chat_id: chatId,
+			rich_message: richMessage,
+		});
+	}
+
+	async editMessageText(chatId: number, messageId: number, text: string, opts?: { parseMode?: "HTML"; replyMarkup?: unknown; richMessage?: import("./types.js").InputRichMessage }): Promise<import("./types.js").TgMessage> {
 		return this.call("editMessageText", {
 			chat_id: chatId,
 			message_id: messageId,
 			text,
 			...(opts?.parseMode ? { parse_mode: opts.parseMode } : {}),
 			...(opts?.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
+			...(opts?.richMessage ? { rich_message: opts.richMessage } : {}),
 		});
 	}
 

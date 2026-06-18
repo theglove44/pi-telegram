@@ -117,6 +117,16 @@ export function registerTelegramCommands(pi: ExtensionAPI, deps: CommandDeps): v
 		handler: async (args, ctx) => {
 			const c = await commandCtxFromTerminal(pi, deps.queue, deps, ctx);
 			const r = await dispatchTelegramCommand("tgweather", args, c);
+			const client = deps.getClient();
+			const chatId = deps.getChatId();
+			if (r.richMessage && client && chatId !== null) {
+				try {
+					await client.sendRichMessage(chatId, r.richMessage);
+					return;
+				} catch (err) {
+					console.warn(`[pi-telegram] terminal tgweather sendRichMessage failed: ${(err as Error).message}`);
+				}
+			}
 			ctx.ui.notify(r.text, "info");
 		},
 	});

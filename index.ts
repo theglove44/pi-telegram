@@ -47,7 +47,8 @@ import {
 	type CommandCtx,
 	type ModelRegistryLike,
 } from "./src/commandBody.js";
-import { extractLocation, isForecastQuery, weatherReply, weatherReplyForecast } from "./src/weather.js";
+import { extractLocation, isForecastQuery, weatherReplyRich, weatherReplyForecastRich } from "./src/weather.js";
+import { plainFromRichHtml } from "./src/richMessage.js";
 
 export default function (pi: ExtensionAPI): void {
 	const queue = new TurnQueue();
@@ -316,10 +317,10 @@ async function handleUpdate(
 		}
 		try {
 			try { await client.sendChatAction(chatId, "typing"); } catch { /* ignore */ }
-			const reply = await weatherReplyForecast(forecastLocation);
-			const parseMode = /<[a-z]/.test(reply) ? "HTML" : undefined;
-			try { await client.sendMessage(chatId, reply, { parseMode }); } catch (err) {
-				console.error(`[pi-telegram] forecast reply failed: ${(err as Error).message}`);
+			const rich = await weatherReplyForecastRich(forecastLocation);
+			try { await client.sendRichMessage(chatId, rich); } catch (err) {
+				console.warn(`[pi-telegram] sendRichMessage failed, falling back: ${(err as Error).message}`);
+				try { await client.sendMessage(chatId, plainFromRichHtml(rich.html ?? ""), {}); } catch { /* ignore */ }
 			}
 		} catch (err) {
 			console.error(`[pi-telegram] forecast lookup failed: ${(err as Error).message}`);
@@ -338,10 +339,10 @@ async function handleUpdate(
 		}
 		try {
 			try { await client.sendChatAction(chatId, "typing"); } catch { /* ignore */ }
-			const reply = await weatherReply(weatherLocation);
-			const parseMode = /<[a-z]/.test(reply) ? "HTML" : undefined;
-			try { await client.sendMessage(chatId, reply, { parseMode }); } catch (err) {
-				console.error(`[pi-telegram] weather reply failed: ${(err as Error).message}`);
+			const rich = await weatherReplyRich(weatherLocation);
+			try { await client.sendRichMessage(chatId, rich); } catch (err) {
+				console.warn(`[pi-telegram] sendRichMessage failed, falling back: ${(err as Error).message}`);
+				try { await client.sendMessage(chatId, plainFromRichHtml(rich.html ?? ""), {}); } catch { /* ignore */ }
 			}
 		} catch (err) {
 			console.error(`[pi-telegram] weather lookup failed: ${(err as Error).message}`);
@@ -405,6 +406,18 @@ async function tryDispatchTelegramCommand(
 	const providers = await getAvailableProviders();
 	const ctx: CommandCtx = { ...baseCtx, availableProviders: providers };
 	const r = await dispatchTelegramCommand(name as Parameters<typeof dispatchTelegramCommand>[0], args, ctx);
+
+	// Prefer the new Bot API 10.1 Rich Messages when the command provides one.
+	if (r.richMessage) {
+		try {
+			await client.sendRichMessage(chatId, r.richMessage);
+			return true;
+		} catch (err) {
+			console.warn(`[pi-telegram] sendRichMessage failed, falling back to text: ${(err as Error).message}`);
+			// fall through to text fallback
+		}
+	}
+
 	const opts: { parseMode?: "HTML"; replyMarkup?: unknown } = {};
 	if (r.markup) opts.replyMarkup = r.markup;
 	// Use HTML for commands that may have markup, plain text otherwise.

@@ -70,3 +70,19 @@ test("5xx retries with exponential backoff up to MAX_RETRIES, then throws", asyn
 	await assert.rejects(c.call("getMe"), (err: unknown) => err instanceof TelegramApiError);
 	assert.equal(callCount(), 5, "expected initial + 4 retries = 5 attempts");
 });
+
+test("sendRichMessage calls the sendRichMessage method with rich_message payload", async () => {
+	const { fn, callCount } = makeFetch([{ status: 200, body: { ok: true, result: { message_id: 7 } } }]);
+	const c = new TelegramClient({ token: "tok", fetchImpl: fn, timeoutMs: 1000 });
+	const r = await c.sendRichMessage(123, { html: "\u003ch1\u003eHi\u003c/h1\u003e" });
+	assert.equal(r.message_id, 7);
+	assert.equal(callCount(), 1);
+});
+
+test("sendRichMessageDraft calls the sendRichMessageDraft method", async () => {
+	const { fn, callCount } = makeFetch([{ status: 200, body: { ok: true, result: { message_id: 8 } } }]);
+	const c = new TelegramClient({ token: "tok", fetchImpl: fn, timeoutMs: 1000 });
+	const r = await c.sendRichMessageDraft(123, { markdown: "# Hi" });
+	assert.equal(r.message_id, 8);
+	assert.equal(callCount(), 1);
+});

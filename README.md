@@ -90,6 +90,14 @@ pi -e /home/christof21/Projects/pi-telegram/index.ts
 | `/telegram-setup` | One-shot config (token + chat id) |
 | `/abort` `/compact` `/new` `/model` `/thinking` `/queue` `/status` | pi core commands (forwarded) |
 
+## Rich formatting
+
+Weather replies are sent as **Telegram Bot API 10.1 Rich Messages**
+(`sendRichMessage`) using native headings, paragraphs, and tables. This
+means no raw HTML tags in the chat and proper structured rendering on
+supported Telegram clients. If the Bot API rejects the rich message, the
+bot falls back to a plain-text rendering of the same content.
+
 ## Weather
 
 Casual weather queries are intercepted before they reach the LLM:
@@ -154,6 +162,7 @@ src/
 ├── commands.ts                # Slash commands
 ├── lifecycle.ts               # pi event hooks (agent_end, tool_call, message_update)
 ├── weather.ts                 # Open-Meteo weather lookup
+├── richMessage.ts             # Telegram Bot API 10.1 Rich HTML builder
 └── types.ts                   # Shared types
 tests/                         # Node --test, 5 suites
 scripts/setup.sh               # Interactive setup helper

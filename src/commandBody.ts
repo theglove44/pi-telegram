@@ -31,7 +31,9 @@ import {
 } from "./inline.js";
 import { loadAlwaysAllow, saveAlwaysAllow } from "./inline.js";
 import { readDefaultLocation, saveDefaultLocation } from "./config.js";
-import { isForecastQuery, weatherReply, weatherReplyForecast } from "./weather.js";
+import { isForecastQuery, weatherReplyRich, weatherReplyForecastRich } from "./weather.js";
+import { plainFromRichHtml } from "./richMessage.js";
+import type { InputRichMessage } from "./types.js";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 type ThinkingLevel = typeof THINKING_LEVELS[number];
@@ -251,10 +253,18 @@ export type CommandName =
 	| "tgtools" | "tgnew" | "tgcompact" | "tgreconnect" | "tgapprove" | "tgweather" | "tgweather-setdefault" | "tgweather-cleargetdefault"
 	| "model" | "thinking" | "queue" | "status" | "compact" | "new" | "abort" | "modelpage";
 
+/** Result returned by {@link dispatchTelegramCommand}. */
+export interface CommandResult {
+	text: string;
+	markup?: unknown;
+	richMessage?: InputRichMessage;
+	toast?: { level: "info" | "warning" | "error" };
+}
+
 /**
  * Dispatch a command from Telegram. Returns the body that the caller should
  * send back to the user. The caller is responsible for actually calling
- * `client.sendMessage` (with HTML parse mode and any markup).
+ * `client.sendMessage` / `client.sendRichMessage` (with any markup).
  *
  * For commands that produce an inline keyboard (model, queue), the caller
  * sends a message with `replyMarkup: result.markup`.
@@ -262,12 +272,16 @@ export type CommandName =
  * For commands that have an immediate side effect (abort, reconnect, tool
  * toggle, new, compact), the side effect is taken on `ctx` and the result
  * is just a confirmation string.
+ *
+ * For commands that can use Telegram Bot API 10.1 Rich Messages, the result
+ * includes `richMessage`; the caller should prefer `sendRichMessage` and fall
+ * back to `text` if the Bot API rejects it.
  */
 export async function dispatchTelegramCommand(
 	name: CommandName,
 	args: string,
 	ctx: CommandCtx,
-): Promise<{ text: string; markup?: unknown; toast?: { level: "info" | "warning" | "error" } }> {
+): Promise<CommandResult> {
 	switch (name) {
 		case "tgstatus":
 		case "status": {
@@ -356,15 +370,15 @@ export async function dispatchTelegramCommand(
 				const loc = forecastMatch.location || readDefaultLocation();
 				if (!loc) return { text: "❌ Tell me the location. Usage: /tgweather forecast London" };
 				try {
-					const reply = await weatherReplyForecast(loc);
-					return { text: reply };
+					const rich = await weatherReplyForecastRich(loc);
+					return { text: plainFromRichHtml(rich.html ?? ""), richMessage: rich };
 				} catch (err) {
 					return { text: `❌ Forecast lookup failed: ${(err as Error).message}` };
 				}
 			}
 			try {
-				const reply = await weatherReply(query);
-				return { text: reply };
+				const rich = await weatherReplyRich(query);
+				return { text: plainFromRichHtml(rich.html ?? ""), richMessage: rich };
 			} catch (err) {
 				return { text: `❌ Weather lookup failed: ${(err as Error).message}` };
 			}

@@ -144,3 +144,15 @@ export interface DraftState {
 	lastSentText: string;
 	lastSentAt: number;
 }
+
+/** Telegram Bot API 10.1 InputRichMessage payload.
+ *
+ * Can be a Telegram Rich HTML string or a Telegram Rich Markdown string.
+ * Only one of html/markdown should be provided.
+ */
+export interface InputRichMessage {
+	html?: string;
+	markdown?: string;
+	is_rtl?: boolean;
+	skip_entity_detection?: boolean;
+}

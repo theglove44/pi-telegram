@@ -10,6 +10,9 @@
  * All outbound calls use the native `fetch` available in Node 22+.
  */
 
+import { buildForecastRichMessage, buildWeatherRichMessage, type RichForecastRow } from "./richMessage.js";
+import type { InputRichMessage } from "./types.js";
+
 export interface GeocodeResult {
 	name: string;
 	country?: string;
@@ -253,6 +256,28 @@ export function formatForecast(result: ForecastResult, query?: string): string {
 	return lines.join("\n");
 }
 
+function forecastRows(result: ForecastResult): RichForecastRow[] {
+	return result.days.map((day) => {
+		const date = new Date(day.date + "T12:00:00");
+		const dayName = date.toLocaleDateString("en-GB", { weekday: "short" });
+		const dateStr = date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+		return {
+			day: `${dayName} ${dateStr}`,
+			conditions: describeWeatherCode(day.weatherCode),
+			high: `${day.max.toFixed(1)}°C`,
+			low: `${day.min.toFixed(1)}°C`,
+		};
+	});
+}
+
+/**
+ * Format a 7-day forecast as a Rich Message payload.
+ */
+export function formatForecastRich(result: ForecastResult, query?: string): InputRichMessage {
+	const region = [result.location.name, result.location.admin1, result.location.country].filter(Boolean).join(", ");
+	return buildForecastRichMessage({ region, rows: forecastRows(result), query });
+}
+
 /**
  * Resolve a free-text location into a formatted 7-day forecast reply.
  */
@@ -261,6 +286,22 @@ export async function weatherReplyForecast(query: string, fetchImpl: typeof fetc
 	if (!loc) return `❌ Couldn't find a location matching "${escapeHtml(query)}". Try "/tgweather forecast City, Country".`;
 	const forecast = await fetchForecast(loc, fetchImpl);
 	return formatForecast(forecast, query);
+}
+
+/**
+ * Resolve a free-text location into a Rich Message 7-day forecast reply.
+ */
+export async function weatherReplyForecastRich(query: string, fetchImpl: typeof fetch = fetch): Promise<InputRichMessage> {
+	const loc = await geocodeLocation(query, fetchImpl);
+	if (!loc) {
+		return buildForecastRichMessage({
+			region: "Unknown",
+			rows: [],
+			query: `❌ Couldn't find a location matching "${query}". Try "/tgweather forecast City, Country".`,
+		});
+	}
+	const forecast = await fetchForecast(loc, fetchImpl);
+	return formatForecastRich(forecast, query);
 }
 
 /**
@@ -329,6 +370,23 @@ export function formatWeather(result: WeatherResult, query?: string): string {
 }
 
 /**
+ * Format a WeatherResult as a Rich Message payload.
+ */
+export function formatWeatherRich(result: WeatherResult, query?: string): InputRichMessage {
+	const region = [result.location.name, result.location.admin1, result.location.country].filter(Boolean).join(", ");
+	return buildWeatherRichMessage({
+		region,
+		conditions: describeWeatherCode(result.current.weatherCode),
+		temperature: result.current.temperature,
+		humidity: result.current.relativeHumidity,
+		windSpeed: result.current.windSpeed,
+		high: result.daily.max,
+		low: result.daily.min,
+		query,
+	});
+}
+
+/**
  * Resolve a free-text location into a formatted weather reply.
  *
  * Returns a string ready to send back to the user. Throws on network errors;
@@ -339,4 +397,25 @@ export async function weatherReply(query: string, fetchImpl: typeof fetch = fetc
 	if (!loc) return `❌ Couldn't find a location matching "${escapeHtml(query)}". Try "/tgweather City, Country".`;
 	const weather = await fetchWeather(loc, fetchImpl);
 	return formatWeather(weather, query);
+}
+
+/**
+ * Resolve a free-text location into a Rich Message weather reply.
+ */
+export async function weatherReplyRich(query: string, fetchImpl: typeof fetch = fetch): Promise<InputRichMessage> {
+	const loc = await geocodeLocation(query, fetchImpl);
+	if (!loc) {
+		return buildWeatherRichMessage({
+			region: "Unknown",
+			conditions: `❌ Couldn't find a location matching "${query}". Try "/tgweather City, Country".`,
+			temperature: 0,
+			humidity: 0,
+			windSpeed: 0,
+			high: 0,
+			low: 0,
+			query,
+		});
+	}
+	const weather = await fetchWeather(loc, fetchImpl);
+	return formatWeatherRich(weather, query);
 }

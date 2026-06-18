@@ -14,8 +14,12 @@ import {
 	fetchForecast,
 	formatWeather,
 	formatForecast,
+	formatWeatherRich,
+	formatForecastRich,
 	weatherReply,
 	weatherReplyForecast,
+	weatherReplyRich,
+	weatherReplyForecastRich,
 	describeWeatherCode,
 	isForecastQuery,
 	type GeocodeResult,
@@ -304,4 +308,70 @@ test("weatherReplyForecast returns not-found when geocoding misses", async () =>
 	const fetchImpl = makeFetch({ geocode: { results: [] } });
 	const reply = await weatherReplyForecast("Nowheresville", fetchImpl);
 	assert.match(reply, /Couldn't find a location/);
+});
+
+test("formatWeatherRich returns an InputRichMessage with heading and details", () => {
+	const rich = formatWeatherRich({
+		location: { name: "London", country: "United Kingdom", admin1: "England", latitude: 0, longitude: 0 },
+		current: { temperature: 15.0, relativeHumidity: 70, weatherCode: 63, windSpeed: 10.0 },
+		daily: { max: 18.0, min: 12.0 },
+	}, "London");
+	assert.ok(rich.html);
+	assert.match(rich.html!, /<h1>Weather for London, England, United Kingdom<\/h1>/);
+	assert.match(rich.html!, /15\.0°C/);
+	assert.match(rich.html!, /High 18\.0°C · Low 12\.0°C/);
+});
+
+test("formatForecastRich returns an InputRichMessage with a table", () => {
+	const days: ForecastDay[] = [
+		{ date: "2026-06-17", max: 20.0, min: 14.0, weatherCode: 61 },
+		{ date: "2026-06-18", max: 22.0, min: 15.0, weatherCode: 0 },
+	];
+	const rich = formatForecastRich({
+		location: { name: "Rochdale", country: "United Kingdom", admin1: "England", latitude: 0, longitude: 0 },
+		days,
+	}, "Rochdale");
+	assert.ok(rich.html);
+	assert.match(rich.html!, /<h1>7-day forecast for Rochdale, England, United Kingdom<\/h1>/);
+	assert.match(rich.html!, /<table>/);
+	assert.match(rich.html!, /20\.0°C/);
+});
+
+test("weatherReplyRich returns a rich message on success", async () => {
+	const fetchImpl = makeFetch({
+		geocode: { results: [{ name: "Paris", country: "France", latitude: 48.85, longitude: 2.35 }] },
+		forecast: {
+			current: { temperature_2m: 20.0, relative_humidity_2m: 55, weather_code: 1, wind_speed_10m: 8.0 },
+			daily: { temperature_2m_max: [23.0], temperature_2m_min: [16.0] },
+		},
+	});
+	const rich = await weatherReplyRich("Paris", fetchImpl);
+	assert.ok(rich.html);
+	assert.match(rich.html!, /Weather for Paris, France/);
+	assert.match(rich.html!, /20\.0°C/);
+});
+
+test("weatherReplyForecastRich returns a rich table on success", async () => {
+	const fetchImpl = makeFetch({
+		geocode: { results: [{ name: "Paris", country: "France", latitude: 48.85, longitude: 2.35 }] },
+		forecast: {
+			daily: {
+				time: ["2026-06-17", "2026-06-18"],
+				temperature_2m_max: [23.0, 25.0],
+				temperature_2m_min: [16.0, 17.0],
+				weather_code: [1, 0],
+			},
+		},
+	});
+	const rich = await weatherReplyForecastRich("Paris", fetchImpl);
+	assert.ok(rich.html);
+	assert.match(rich.html!, /7-day forecast for Paris, France/);
+	assert.match(rich.html!, /<table>/);
+});
+
+test("weatherReplyForecastRich returns an error rich message when geocoding misses", async () => {
+	const fetchImpl = makeFetch({ geocode: { results: [] } });
+	const rich = await weatherReplyForecastRich("Nowheresville", fetchImpl);
+	assert.ok(rich.html);
+	assert.match(rich.html!, /Couldn't find a location/);
 });
