@@ -1,16 +1,25 @@
 /**
- * Telegram Bot API 10.1 Rich Messages — minimal builder.
+ * Telegram Bot API 10.1 Rich Messages — Rich HTML builder.
  *
  * Telegram's `sendRichMessage` accepts an InputRichMessage whose payload is
  * either a Telegram Rich HTML document (`html` field) or a Telegram Rich
- * Markdown document (`markdown` field). This module builds the HTML variant.
+ * Markdown document (`markdown` field). This module builds the HTML variant
+ * using the full Rich HTML vocabulary documented at
+ * https://core.telegram.org/bots/api#rich-message-formatting-options.
  *
- * The allowed subset is close to normal HTML: block tags like <h1>...<h6>,
- * <p>, <table>/<thead>/<tbody>/<tr>/<th>/<td>, <pre>, <blockquote>,
- * <ul>/<ol>/<li>, plus inline formatting (<b>, <i>, <u>, <s>, <code>, <a>).
+ * Supported Rich HTML block tags (subset we use):
+ *   <h1>...<h6>, <p>, <blockquote>, <tg-pull-quote>, <hr/>,
+ *   <ul>/<ol>/<li>, <tg-list-item checked>, <details open>/<summary>,
+ *   <table><caption><tr><th align> <td align colspan rowspan valign>,
+ *   <pre><code class="language-...">, <footer>, <a name="...">.
  *
- * We intentionally keep the builder tiny and auditable. For the full Bot API
- * type definitions see https://core.telegram.org/bots/api#rich-messages.
+ * Supported inline tags:
+ *   <b>/<strong>, <i>/<em>, <u>/<ins>, <s>/<del>, <tg-spoiler>, <code>,
+ *   <tg-marked>, <tg-subscript>, <tg-superscript>, <a href="...">,
+ *   <tg-time unix="..." format="...">, <tg-math>...</tg-math>.
+ *
+ * IMPORTANT: Rich HTML tables do NOT use <thead>/<tbody>; rows live directly
+ * under <table>. A <caption> may appear as the first child of <table>.
  */
 
 import type { InputRichMessage } from "./types.js";
@@ -26,12 +35,13 @@ export function escapeRichHtml(s: string): string {
  */
 export function plainFromRichHtml(html: string): string {
 	return html
-		.replace(/\u003cbr\s*\/?\u003e/gi, "\n")
-		.replace(/\u003c\/(p|h[1-6]|li|tr)\u003e/gi, "\n")
-		.replace(/\u003c[^\u003e]+\u003e/g, "")
-		.replace(/\u0026amp;/g, "&")
-		.replace(/\u0026lt;/g, "<")
-		.replace(/\u0026gt;/g, ">")
+		.replace(/<br\s*\/?>/gi, "\n")
+		.replace(/<\/(p|h[1-6]|li|tr|blockquote|details|footer|caption|summary)>/gi, "\n")
+		.replace(/<hr\s*\/?>/gi, "\n---\n")
+		.replace(/<[^>]+>/g, "")
+		.replace(/&amp;/g, "&")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
 		.replace(/\n{3,}/g, "\n\n")
 		.trim();
 }
@@ -53,15 +63,43 @@ function bold(text: string): string {
 	return `<b>${escapeRichHtml(text)}</b>`;
 }
 
-/** Build a simple <table> from string cells. Cells are NOT re-escaped. */
-function table(headers: string[], rows: string[][]): string {
-	const ths = headers.map((h) => `<th>${h}</th>`).join("");
-	const head = `<thead><tr>${ths}</tr></thead>`;
-	const bodyRows = rows
+/** A block quotation with optional credit. Rich HTML: <blockquote>...</blockquote>. */
+function blockquote(content: string, credit?: string): string {
+	const c = credit ? `<cite>${escapeRichHtml(credit)}</cite>` : "";
+	return `<blockquote>${content}${c}</blockquote>`;
+}
+
+/** A divider. Rich HTML: <hr/>. */
+function divider(): string {
+	return `<hr/>`;
+}
+
+/** A footer. Rich HTML: <footer>...</footer>. */
+function footer(text: string): string {
+	return `<footer>${text}</footer>`;
+}
+
+/** Build a Rich HTML <table> from pre-rendered cell HTML.
+ *
+ * Rich HTML tables are flat: <table><caption>?<tr><th|td>...</tr>...</table>.
+ * There is NO <thead>/<tbody>; those are plain-HTML constructs the Rich HTML
+ * parser does not recognise, which is why earlier output rendered flat.
+ */
+function table(opts: {
+	caption?: string;
+	headers?: string[];
+	rows: string[][];
+	isBordered?: boolean;
+	isStriped?: boolean;
+}): string {
+	const cap = opts.caption ? `<caption>${escapeRichHtml(opts.caption)}</caption>` : "";
+	const headerRow = opts.headers?.length
+		? `<tr>${opts.headers.map((hd) => `<th>${hd}</th>`).join("")}</tr>`
+		: "";
+	const bodyRows = opts.rows
 		.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`)
 		.join("");
-	const body = bodyRows ? `<tbody>${bodyRows}</tbody>` : "";
-	return `<table>${head}${body}</table>`;
+	return `<table>${cap}${headerRow}${bodyRows}</table>`;
 }
 
 /** Helper to build a Rich HTML document from one or more block fragments. */
@@ -80,19 +118,39 @@ export function buildWeatherRichMessage(opts: {
 	low: number;
 	query?: string;
 }): InputRichMessage {
+	const temp = opts.temperature.toFixed(1);
+	const hum = String(opts.humidity);
+	const wind = opts.windSpeed.toFixed(1);
+	const hi = opts.high.toFixed(1);
+	const lo = opts.low.toFixed(1);
+
+	// Conditions as a pull quote — Telegram renders these as centred emphasis.
+	const conditionsQuote = `<tg-pull-quote>${escapeRichHtml(opts.conditions)}</tg-pull-quote>`;
+
+	// Key metrics in a bordered, striped two-column table for a clean card look.
+	const metrics = table({
+		caption: "Current conditions",
+		isBordered: true,
+		isStriped: true,
+		rows: [
+			[`🌡️ Temperature`, bold(`${temp}°C`)],
+			[`💧 Humidity`, bold(`${hum}%`)],
+			[`💨 Wind`, bold(`${wind} km/h`)],
+			[`📈 High / 📉 Low`, bold(`${hi}°C / ${lo}°C`)],
+		],
+	});
+
 	const blocks: string[] = [
 		h(1, `Weather for ${opts.region}`),
-		p(escapeRichHtml(opts.conditions)),
-		p([
-			`🌡️ ${opts.temperature.toFixed(1)}°C`,
-			`💧 ${opts.humidity}% humidity`,
-			`💨 ${opts.windSpeed.toFixed(1)} km/h wind`,
-			`📈 High ${opts.high.toFixed(1)}°C · Low ${opts.low.toFixed(1)}°C`,
-		].join("<br>")),
+		conditionsQuote,
+		metrics,
+		divider(),
 	];
+
 	if (opts.query && opts.query.trim().toLowerCase() !== opts.region.toLowerCase()) {
-		blocks.push(p(italic(`Query: ${opts.query}`)));
+		blocks.push(footer(italic(`Query: ${opts.query}`)));
 	}
+
 	return richHtml(...blocks);
 }
 
@@ -114,12 +172,27 @@ export function buildForecastRichMessage(opts: {
 	const rows = opts.rows.map((r) => [
 		escapeRichHtml(r.day),
 		escapeRichHtml(r.conditions),
-		escapeRichHtml(r.high),
+		bold(escapeRichHtml(r.high)),
 		escapeRichHtml(r.low),
 	]);
-	const blocks: string[] = [h(1, `7-day forecast for ${opts.region}`), table(headerCells, rows)];
+
+	const forecastTable = table({
+		caption: `7-day forecast for ${opts.region}`,
+		headers: headerCells,
+		rows,
+		isBordered: true,
+		isStriped: true,
+	});
+
+	const blocks: string[] = [
+		h(1, `Forecast for ${opts.region}`),
+		forecastTable,
+		divider(),
+	];
+
 	if (opts.query && opts.query.trim().toLowerCase() !== opts.region.toLowerCase()) {
-		blocks.push(p(italic(`Query: ${opts.query}`)));
+		blocks.push(footer(italic(`Query: ${opts.query}`)));
 	}
+
 	return richHtml(...blocks);
 }

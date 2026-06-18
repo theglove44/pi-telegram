@@ -364,11 +364,18 @@ test("formatWeatherRich returns an InputRichMessage with heading and details", (
 	}, "London");
 	assert.ok(rich.html);
 	assert.match(rich.html!, /<h1>Weather for London, England, United Kingdom<\/h1>/);
+	assert.match(rich.html!, /<tg-pull-quote>🌧️ moderate rain<\/tg-pull-quote>/);
 	assert.match(rich.html!, /15\.0°C/);
-	assert.match(rich.html!, /High 18\.0°C · Low 12\.0°C/);
+	assert.match(rich.html!, /18\.0°C/);
+	assert.match(rich.html!, /12\.0°C/);
+	// Rich HTML table is flat — no thead/tbody.
+	assert.match(rich.html!, /<table>/);
+	assert.match(rich.html!, /<caption>Current conditions<\/caption>/);
+	assert.doesNotMatch(rich.html!, /<thead>/);
+	assert.doesNotMatch(rich.html!, /<tbody>/);
 });
 
-test("formatForecastRich returns an InputRichMessage with a table", () => {
+test("formatForecastRich returns an InputRichMessage with a flat bordered table", () => {
 	const days: ForecastDay[] = [
 		{ date: "2026-06-17", max: 20.0, min: 14.0, weatherCode: 61 },
 		{ date: "2026-06-18", max: 22.0, min: 15.0, weatherCode: 0 },
@@ -378,9 +385,13 @@ test("formatForecastRich returns an InputRichMessage with a table", () => {
 		days,
 	}, "Rochdale");
 	assert.ok(rich.html);
-	assert.match(rich.html!, /<h1>7-day forecast for Rochdale, England, United Kingdom<\/h1>/);
+	assert.match(rich.html!, /<h1>Forecast for Rochdale, England, United Kingdom<\/h1>/);
 	assert.match(rich.html!, /<table>/);
+	assert.match(rich.html!, /<caption>7-day forecast for Rochdale, England, United Kingdom<\/caption>/);
 	assert.match(rich.html!, /20\.0°C/);
+	// Rich HTML tables are flat; thead/tbody must not appear.
+	assert.doesNotMatch(rich.html!, /<thead>/);
+	assert.doesNotMatch(rich.html!, /<tbody>/);
 });
 
 test("weatherReplyRich returns a rich message on success", async () => {

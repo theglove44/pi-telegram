@@ -1,5 +1,10 @@
 /**
  * Tests for src/richMessage.ts — Telegram Bot API 10.1 Rich HTML builder.
+ *
+ * These tests assert the Rich HTML vocabulary documented at
+ * https://core.telegram.org/bots/api#rich-message-formatting-options.
+ * Notably Rich HTML tables are flat (<table><caption>?<tr><th|td>...) and do
+ * NOT use <thead>/<tbody>, which the Rich parser does not recognise.
  */
 
 import { test } from "node:test";
@@ -11,7 +16,7 @@ test("escapeRichHtml escapes ampersand and angle brackets", () => {
 	assert.equal(escapeRichHtml("plain"), "plain");
 });
 
-test("buildWeatherRichMessage produces a Rich HTML payload", () => {
+test("buildWeatherRichMessage produces a Rich HTML payload with heading and pull-quote", () => {
 	const rich = buildWeatherRichMessage({
 		region: "Rochdale, England, United Kingdom",
 		conditions: "☁️ overcast",
@@ -24,14 +29,20 @@ test("buildWeatherRichMessage produces a Rich HTML payload", () => {
 	});
 	assert.ok(rich.html);
 	assert.match(rich.html!, /<h1>Weather for Rochdale, England, United Kingdom<\/h1>/);
-	assert.match(rich.html!, /☁️ overcast/);
+	assert.match(rich.html!, /<tg-pull-quote>☁️ overcast<\/tg-pull-quote>/);
 	assert.match(rich.html!, /18\.1°C/);
-	assert.match(rich.html!, /67% humidity/);
-	assert.match(rich.html!, /14\.8 km\/h wind/);
-	assert.match(rich.html!, /High 19\.9°C · Low 14\.8°C/);
+	assert.match(rich.html!, /67%/);
+	assert.match(rich.html!, /14\.8 km\/h/);
+	assert.match(rich.html!, /19\.9°C/);
+	assert.match(rich.html!, /14\.8°C/);
+	// Metrics rendered as a bordered striped table, no thead/tbody.
+	assert.match(rich.html!, /<table>/);
+	assert.match(rich.html!, /<caption>Current conditions<\/caption>/);
+	assert.doesNotMatch(rich.html!, /<thead>/);
+	assert.doesNotMatch(rich.html!, /<tbody>/);
 });
 
-test("buildWeatherRichMessage includes query note when it differs from region", () => {
+test("buildWeatherRichMessage includes query footer when query differs from region", () => {
 	const rich = buildWeatherRichMessage({
 		region: "Springfield, Illinois, United States",
 		conditions: "☀️ clear sky",
@@ -42,10 +53,24 @@ test("buildWeatherRichMessage includes query note when it differs from region", 
 		low: 15.0,
 		query: "Springfield, IL",
 	});
-	assert.match(rich.html!, /<i>Query: Springfield, IL<\/i>/);
+	assert.match(rich.html!, /<footer><i>Query: Springfield, IL<\/i><\/footer>/);
 });
 
-test("buildForecastRichMessage produces a table", () => {
+test("buildWeatherRichMessage omits query footer when query matches region", () => {
+	const rich = buildWeatherRichMessage({
+		region: "Rochdale",
+		conditions: "☀️ clear sky",
+		temperature: 20.0,
+		humidity: 50,
+		windSpeed: 5.0,
+		high: 25.0,
+		low: 15.0,
+		query: "rochdale",
+	});
+	assert.doesNotMatch(rich.html!, /<footer>/);
+});
+
+test("buildForecastRichMessage produces a flat bordered striped table with caption", () => {
 	const rich = buildForecastRichMessage({
 		region: "Rochdale, England, United Kingdom",
 		rows: [
@@ -54,17 +79,33 @@ test("buildForecastRichMessage produces a table", () => {
 		],
 	});
 	assert.ok(rich.html);
-	assert.match(rich.html!, /<h1>7-day forecast for Rochdale, England, United Kingdom<\/h1>/);
+	assert.match(rich.html!, /<h1>Forecast for Rochdale, England, United Kingdom<\/h1>/);
 	assert.match(rich.html!, /<table>/);
-	assert.match(rich.html!, /<thead>/);
-	assert.match(rich.html!, /<tbody>/);
+	assert.match(rich.html!, /<caption>7-day forecast for Rochdale, England, United Kingdom<\/caption>/);
 	assert.match(rich.html!, /<th>Day<\/th>/);
+	assert.match(rich.html!, /<th>Conditions<\/th>/);
+	assert.match(rich.html!, /<th>High<\/th>/);
+	assert.match(rich.html!, /<th>Low<\/th>/);
 	assert.match(rich.html!, /<td>Wed 17 Jun<\/td>/);
-	assert.match(rich.html!, /19\.9°C/);
+	assert.match(rich.html!, /<td>🌦️ moderate drizzle<\/td>/);
+	assert.match(rich.html!, /<td><b>19\.9°C<\/b><\/td>/);
+	// Rich HTML tables must NOT use thead/tbody.
+	assert.doesNotMatch(rich.html!, /<thead>/);
+	assert.doesNotMatch(rich.html!, /<tbody>/);
+});
+
+test("buildForecastRichMessage includes query footer when query differs", () => {
+	const rich = buildForecastRichMessage({
+		region: "Paris, France",
+		rows: [{ day: "Mon 1 Jan", conditions: "☀️ clear sky", high: "10.0°C", low: "2.0°C" }],
+		query: "paris",
+	});
+	// "paris" !== "Paris, France" so footer is included.
+	assert.match(rich.html!, /<footer><i>Query: paris<\/i><\/footer>/);
 });
 
 test("plainFromRichHtml strips tags and decodes entities", () => {
-	const plain = plainFromRichHtml("\u003ch1\u003eHello\u003c/h1\u003e\u003cp\u003eA \u003cb\u003eworld\u003c/b\u003e\u003c/p\u003e");
+	const plain = plainFromRichHtml("<h1>Hello</h1><p>A <b>world</b></p>");
 	assert.match(plain, /Hello/);
 	assert.match(plain, /world/);
 	assert.doesNotMatch(plain, /<\/?h1>/);
@@ -72,6 +113,13 @@ test("plainFromRichHtml strips tags and decodes entities", () => {
 });
 
 test("plainFromRichHtml converts br tags to newlines", () => {
-	const plain = plainFromRichHtml("\u003cp\u003ea\u003cbr\u003eb\u003c/p\u003e");
+	const plain = plainFromRichHtml("<p>a<br>b</p>");
 	assert.match(plain, /a\nb/);
+});
+
+test("plainFromRichHtml unwraps blockquote, footer, and caption", () => {
+	const plain = plainFromRichHtml("<blockquote>hi</blockquote><footer>bot</footer><table><caption>cap</caption></table>");
+	assert.match(plain, /hi/);
+	assert.match(plain, /bot/);
+	assert.match(plain, /cap/);
 });
