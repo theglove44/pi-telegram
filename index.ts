@@ -129,6 +129,10 @@ export default function (pi: ExtensionAPI): void {
 			console.log(`[pi-telegram] bot @${me.username ?? me.first_name} (id ${me.id}) for chat ${cfg.allowedChatId}`);
 
 			// Register the command menu so Telegram shows suggestions when the user types "/".
+			// Bot API command names must match ^[a-z][a-z0-9_]{0,31}$ — no hyphens. The
+			// weather default commands use hyphens in the user-facing slash form
+			// (e.g. /tgweather-setdefault), which Telegram still accepts when typed,
+			// but cannot be listed in the menu. Register only the valid subset here.
 			try {
 				await c.call("setMyCommands", {
 					commands: [
@@ -143,8 +147,8 @@ export default function (pi: ExtensionAPI): void {
 						{ command: "tgreconnect", description: "Force a long-poll reconnect" },
 						{ command: "tgapprove", description: "Manage always-allow list" },
 						{ command: "tgweather", description: "Current weather or 7-day forecast (e.g. /tgweather forecast London)" },
-						{ command: "tgweather-setdefault", description: "Set a default weather location (e.g. /tgweather-setdefault Rochdale)" },
-						{ command: "tgweather-cleargetdefault", description: "Clear the default weather location" },
+						{ command: "tgweather_setdefault", description: "Set default weather location (/tgweather-setdefault)" },
+						{ command: "tgweather_cleardefault", description: "Clear default weather location (/tgweather-cleargetdefault)" },
 					],
 				});
 				console.log("[pi-telegram] command menu registered with Telegram");
@@ -161,6 +165,7 @@ export default function (pi: ExtensionAPI): void {
 				log: (level, msg) => {
 					if (level === "error") console.error(`[pi-telegram] ${msg}`);
 					else if (level === "warn") console.warn(`[pi-telegram] ${msg}`);
+					else console.log(`[pi-telegram] ${msg}`);
 				},
 				handler: async (u: TgUpdate) => {
 					await handleUpdate(c, cfg.allowedChatId, u, queue, buildCommandCtx, () => isAgentBusy, dispatchNext);
@@ -250,22 +255,30 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	// session_start: snapshot the model registry (it's only on ctx here),
-	// then start the polling loop. We snapshot in a `pi.on("session_start")`
-	// handler so the registry is fresh on `/reload` too.
+	// Snapshot the model registry on each session start so `/tgmodel` (and
+	// anything else that reads modelRegistry) sees a fresh view after `/reload`.
+	// Polling is NOT tied to session lifecycle: a long-running Telegram bot must
+	// keep polling as long as the extension is loaded, even when pi has no active
+	// session (e.g. when run headless under systemd with no TTY). The polling
+	// long-poll handle keeps the Node process alive.
 	pi.on("session_start", async (_event, ctx) => {
 		modelRegistry = ctx.modelRegistry as ModelRegistryLike;
 		if (ctx.model) currentModel = { provider: ctx.model.provider, id: ctx.model.id };
-		await startPolling();
 	});
 
-	// session_shutdown: clean up.
+	// session_shutdown: do NOT stop polling. Only reset per-session state.
+	// Stopping polling here would kill the bot whenever a chat session ends,
+	// which is wrong for a persistent bot and fatal when running headless
+	// (pi fires session_start then session_shutdown immediately with no TTY,
+	// aborting the poll loop and exiting the process with code 0).
 	pi.on("session_shutdown", async () => {
-		pollCtl?.abort();
-		pollCtl = null;
-		if (lock) { try { await lock.release(); } catch { /* ignore */ } lock = null; }
-		client = null;
-		chatId = null;
+		isAgentBusy = false;
 	});
+
+	// Start polling once at extension load. The lock makes this idempotent:
+	// if a later session_start also calls startPolling (e.g. legacy path), the
+	// second acquisition is a no-op. The pollTask handle keeps the process alive.
+	void startPolling();
 }
 
 async function handleUpdate(
