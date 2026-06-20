@@ -569,3 +569,18 @@ test("isForecastQuery keeps 'for today' as a current-weather request", () => {
 	assert.equal(isForecastQuery("what's the weather for today"), null);
 	assert.equal(isForecastQuery("what's the weather today?"), null);
 });
+
+test("extractLocation returns null for non-weather messages (routing regression)", () => {
+	// Reported bug: "what time is it?" was being routed to the weather lookup
+	// because extractLocation's null result was combined with `?? readDefaultLocation()`.
+	// extractLocation must return null for non-weather text so the router can tell
+	// "not a weather query" apart from "weather query with no location".
+	assert.equal(extractLocation("what time is it?"), null);
+	assert.equal(extractLocation("hello"), null);
+	assert.equal(extractLocation("thanks"), null);
+	// A real weather query with no location still returns null (the router
+	// decides to use the default separately, gated on a "weather" keyword).
+	assert.equal(extractLocation("what's the weather?"), null);
+	// A weather query with a location returns the location.
+	assert.equal(extractLocation("what's the weather in London?"), "London");
+});

@@ -351,15 +351,15 @@ async function handleUpdate(
 
 	// Intercept plain-English weather questions (e.g. "what's the
 	// weather in London?") so they don't have to round-trip through the LLM.
-	const weatherLocation = extractLocation(text) ?? readDefaultLocation();
-	if (weatherLocation !== undefined && weatherLocation !== null) {
-		if (!weatherLocation) {
-			try { await client.sendMessage(chatId, "🌍 Tell me the location: e.g. \"/tgweather London\" or \"weather in Tokyo\"", {}); } catch { /* ignore */ }
-			return;
-		}
+	// Only fall back to the saved default location when the message is actually
+	// a weather request; otherwise unrelated messages (e.g. "what time is it?")
+	// would be mis-routed to the weather lookup via the default location.
+	const weatherLocation = extractLocation(text);
+	const effectiveLocation = weatherLocation ?? (/\bweather\b/i.test(text) ? readDefaultLocation() : undefined);
+	if (effectiveLocation) {
 		try {
 			try { await client.sendChatAction(chatId, "typing"); } catch { /* ignore */ }
-			const rich = await weatherReplyRich(weatherLocation);
+			const rich = await weatherReplyRich(effectiveLocation);
 			try { await client.sendRichMessage(chatId, rich); } catch (err) {
 				console.warn(`[pi-telegram] sendRichMessage failed, falling back: ${(err as Error).message}`);
 				try { await client.sendMessage(chatId, plainFromRichHtml(rich.html ?? ""), {}); } catch { /* ignore */ }
