@@ -1,0 +1,15 @@
+[Unit]
+Description=pi-telegram extension for pi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$HOME/Projects/pi-telegram
+ExecStart=$HOME/.local/bin/pi-telegram-start.sh
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=default.target
