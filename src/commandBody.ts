@@ -19,8 +19,10 @@
  * (when invoked from the terminal) a side-effecting call on `ctx.ui`.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { AuthStorage } from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import type { TelegramClient } from "./transport.js";
 import type { TurnQueue } from "./queue.js";
@@ -50,8 +52,10 @@ export async function getAvailableProviders(): Promise<ReadonlySet<string>> {
 		return cachedAuthProviders;
 	}
 	try {
-		const auth = await AuthStorage.create();
-		cachedAuthProviders = new Set(auth.list());
+		const authPath = join(getAgentDir(), "auth.json");
+		const raw = readFileSync(authPath, "utf-8");
+		const data = JSON.parse(raw) as Record<string, unknown>;
+		cachedAuthProviders = new Set(Object.keys(data));
 	} catch {
 		cachedAuthProviders = new Set();
 	}
