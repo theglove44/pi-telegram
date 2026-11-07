@@ -54,8 +54,9 @@ export async function runPollingLoop(opts: PollingOptions): Promise<void> {
 			for (const u of updates) {
 				if (opts.signal.aborted) break;
 				// Always advance offset past this update, even if we reject it.
+				// Persist that next offset — getUpdates(N) redelivers update N.
 				if (u.update_id >= offset) offset = u.update_id + 1;
-				setLastUpdateId(u.update_id);
+				setLastUpdateId(offset);
 
 				// Allowlist gate. We accept only the configured chat id.
 				const fromChat = u.message?.chat.id ?? u.edited_message?.chat.id ?? u.callback_query?.message?.chat.id;

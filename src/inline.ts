@@ -125,7 +125,7 @@ export function registerWildcardCallback(prefix: string, handler: (data: string)
 }
 
 /** Dispatch a callback_query.data to the right handler. */
-export async function dispatchCallback(data: string, client?: TelegramClient, chatId?: number): Promise<boolean> {
+export async function dispatchCallback(data: string, client?: TelegramClient, chatId?: number, messageId?: number): Promise<boolean> {
 	console.log(`[pi-telegram] dispatchCallback: ${data}`);
 	// Exact nonce match: app:yes:abc123 → strip prefix, look up abc123.
 	const colonParts = data.split(":");
@@ -141,11 +141,12 @@ export async function dispatchCallback(data: string, client?: TelegramClient, ch
 				return true;
 			}
 			console.warn(`[pi-telegram] no pending handler for nonce=${nonce}`);
-			if (client && chatId !== undefined) {
+			// Telegram drops omitted message_id after JSON.stringify(undefined).
+			if (client && chatId !== undefined && typeof messageId === "number" && Number.isFinite(messageId)) {
 				try {
 					await client.editMessageText(
 						chatId,
-						undefined,
+						messageId,
 						`⏰ <b>Approval prompt expired</b>\n\nRun the command again if you still want it.`,
 						{ parseMode: "HTML" },
 					);

@@ -49,6 +49,7 @@ import {
 } from "./src/commandBody.js";
 import { extractLocation, isForecastQuery, parseForecastTarget, weatherReplyRich, weatherReplyForecastRich, weatherReplyForecastDayRich } from "./src/weather.js";
 import { plainFromRichHtml } from "./src/richMessage.js";
+import { createReconnectPolling } from "./src/reconnect.js";
 
 export default function (pi: ExtensionAPI): void {
 	const queue = new TurnQueue();
@@ -101,12 +102,19 @@ export default function (pi: ExtensionAPI): void {
 		await dispatchNext();
 	};
 
-	const reconnectPolling = async (): Promise<void> => {
-		pollCtl?.abort();
-		if (pollTask) { try { await pollTask; } catch { /* ignore */ } }
-		if (lock) { try { await lock.release(); } catch { /* ignore */ } lock = null; }
-		await startPolling();
-	};
+	const reconnect = createReconnectPolling({
+		abort: () => { pollCtl?.abort(); },
+		takePollTask: () => {
+			const t = pollTask;
+			pollTask = null;
+			return t;
+		},
+		releaseLock: async () => {
+			if (lock) { try { await lock.release(); } catch { /* ignore */ } lock = null; }
+		},
+		startPolling: () => startPolling(),
+	});
+	const reconnectPolling = (): Promise<void> => reconnect.reconnect();
 
 	const startPolling = async (): Promise<void> => {
 		const lk = await tryAcquirePollingLock();
@@ -167,9 +175,9 @@ export default function (pi: ExtensionAPI): void {
 					else if (level === "warn") console.warn(`[pi-telegram] ${msg}`);
 					else console.log(`[pi-telegram] ${msg}`);
 				},
-				handler: async (u: TgUpdate) => {
+				handler: reconnect.wrapHandler(async (u: TgUpdate) => {
 					await handleUpdate(c, cfg.allowedChatId, u, queue, buildCommandCtx, () => isAgentBusy, dispatchNext);
-				},
+				}),
 			}).catch((err) => {
 				console.error(`[pi-telegram] polling terminated: ${(err as Error).message}`);
 			});
@@ -292,8 +300,8 @@ async function handleUpdate(
 ): Promise<void> {
 	if (u.callback_query) {
 		const data = u.callback_query.data ?? "";
-		try { await client.answerCallbackQuery(u.callback_query.id); } catch { /* ignore */ }
-		await handleCallback(client, chatId, data, u.callback_query.id, queue, buildCommandCtx);
+		// Answer once in handleCallback — a callback_query can only be answered once.
+		await handleCallback(client, chatId, data, u.callback_query.id, queue, buildCommandCtx, u.callback_query.message?.message_id);
 		return;
 	}
 	const msg = u.message;
@@ -457,8 +465,9 @@ async function handleCallback(
 	callbackQueryId: string,
 	queue: TurnQueue,
 	buildCommandCtx: () => CommandCtx,
+	messageId?: number,
 ): Promise<void> {
-	const ctx = buildCommandCtx();
+	let expiredToast = false;
 
 	// Queue mutations (kept inline; they don't need a command body).
 	if (data.startsWith("tprior:")) {
@@ -466,23 +475,16 @@ async function handleCallback(
 		for (const t of queue.list()) {
 			if (t.id === id) { queue.prioritise(t.telegramMessageId); break; }
 		}
-		return;
-	}
-	if (data.startsWith("tdrop:")) {
+	} else if (data.startsWith("tdrop:")) {
 		const id = data.slice("tdrop:".length);
 		for (const t of queue.list()) {
 			if (t.id === id) { queue.removeByMessageId(t.telegramMessageId); break; }
 		}
-		return;
-	}
-	if (data === "tclear") {
+	} else if (data === "tclear") {
 		const cleared = queue.clearPending();
 		try { await client.sendMessage(chatId, `cleared ${cleared} pending item(s)`, {}); } catch { /* ignore */ }
-		return;
-	}
-
-	// New unified tgcmd:... actions (model picker, thinking, tools).
-	if (data.startsWith("tgcmd:")) {
+	} else if (data.startsWith("tgcmd:")) {
+		// New unified tgcmd:... actions (model picker, thinking, tools).
 		const baseCtx = buildCommandCtx();
 		const providers = await getAvailableProviders();
 		const ctx: CommandCtx = { ...baseCtx, availableProviders: providers };
@@ -493,18 +495,25 @@ async function handleCallback(
 		try { await client.sendMessage(chatId, r.text, opts); } catch (err) {
 			console.error(`[pi-telegram] sendMessage failed: ${(err as Error).message}`);
 		}
-		return;
+	} else {
+		// Approval buttons from src/inline.ts (app:yes:nonce / app:no:nonce / app:always:nonce).
+		// These resolve the pending askApproval() promise and let the tool_call handler proceed.
+		console.log(`[pi-telegram] approval callback: ${data}`);
+		const handled = await dispatchCallback(data, client, chatId, messageId);
+		if (!handled) {
+			console.warn(`[pi-telegram] no approval handler for callback: ${data}`);
+			expiredToast = true;
+		}
 	}
 
-	// Approval buttons from src/inline.ts (app:yes:nonce / app:no:nonce / app:always:nonce).
-	// These resolve the pending askApproval() promise and let the tool_call handler proceed.
-	console.log(`[pi-telegram] approval callback: ${data}`);
-	const handled = await dispatchCallback(data, client, chatId);
-	if (!handled) {
-		console.warn(`[pi-telegram] no approval handler for callback: ${data}`);
-		try { await client.answerCallbackQuery(callbackQueryId, { text: "approval prompt expired or unknown", showAlert: true }); } catch { /* ignore */ }
-	}
-	return;
+	// One answer only — Telegram rejects a second answerCallbackQuery.
+	try {
+		if (expiredToast) {
+			await client.answerCallbackQuery(callbackQueryId, { text: "approval prompt expired or unknown", showAlert: true });
+		} else {
+			await client.answerCallbackQuery(callbackQueryId);
+		}
+	} catch { /* ignore */ }
 }
 
 /** Empty registry used when nothing has been snapshotted yet. */

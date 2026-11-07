@@ -96,7 +96,7 @@ export interface TgConfig {
 	botUsername?: string;
 	botId?: number;
 	allowedChatId: number;     // Hard allowlist; only this chat id may drive the bot
-	lastUpdateId: number;      // Long-poll offset
+	lastUpdateId: number;      // Next getUpdates offset (not the last seen update_id)
 	/** Default location for bare weather queries. */
 	defaultLocation?: string;
 }

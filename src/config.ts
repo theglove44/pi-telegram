@@ -173,7 +173,7 @@ export function saveConfigFile(partial: Partial<TgConfigFile>): TgConfigFile {
 	return next;
 }
 
-/** Update the last seen update_id (used to advance the long-poll offset). */
+/** Persist the next getUpdates offset (highest received update_id + 1). */
 export function setLastUpdateId(id: number): void {
 	if (id <= 0) return;
 	const current = readConfigFileOrEmpty();
