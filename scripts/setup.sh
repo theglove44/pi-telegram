@@ -89,7 +89,7 @@ echo "  ✓ wrote $CONFIG_FILE (mode 0600)"
 
 echo
 echo "Setup complete. To use pi-telegram:"
-echo "  pi -e /home/christof21/Projects/pi-telegram/index.ts"
+echo "  pi -e $HOME/Projects/pi-telegram/index.ts"
 echo
 echo "Or add to ~/.pi/agent/settings.json extensions list:"
-echo "  \"/home/christof21/Projects/pi-telegram\""
+echo "  \"$HOME/Projects/pi-telegram\""
